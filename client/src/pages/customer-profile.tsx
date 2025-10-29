@@ -84,25 +84,32 @@ export default function CustomerProfilePage() {
     },
   });
 
-  const deleteCustomerMutation = useMutation({
-    mutationFn: async (customerId: string) => {
-      return await apiRequest("DELETE", `/api/customers/${customerId}`, undefined);
-    },
-    onSuccess: () => {
-      toast({
-        title: "Success",
-        description: "Customer deleted successfully",
-      });
-      setLocation("/customers");
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+const deleteCustomerMutation = useMutation({
+  mutationFn: async (customerId: string) => {
+    return await apiRequest("DELETE", `/api/customers/${customerId}`);
+  },
+  onSuccess: () => {
+    // Refresh customer list when redirected back
+    queryClient.invalidateQueries({ queryKey: ['/api/customers'] });
+
+    toast({
+      title: "Success",
+      description: "Customer deleted successfully",
+    });
+
+    // Redirect to main customer page
+    setLocation("/customers");
+  },
+  onError: (error: Error) => {
+    toast({
+      title: "Error",
+      description: error.message,
+      variant: "destructive",
+    });
+  },
+});
+
+
 
   const onSubmit = (data: InsertProductCase) => {
     createCaseMutation.mutate(data);

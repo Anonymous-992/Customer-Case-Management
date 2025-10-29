@@ -116,7 +116,7 @@ export default function LoginPage() {
 
           <div className="mt-6 pt-6 border-t">
             <p className="text-xs text-center text-muted-foreground">
-              Default credentials: admin / admin123
+              developed by @Fawad
             </p>
           </div>
         </CardContent>

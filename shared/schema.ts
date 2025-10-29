@@ -106,13 +106,17 @@ export const insertProductCaseSchema = z.object({
   dateOfPurchase: z.string(), // Will be converted to Date
   receiptNumber: z.string().min(1, "Receipt number is required"),
   status: caseStatusEnum,
-  repairNeeded: z.string().min(5, "Please describe the repair needed"),
+
+  // ✅ allow any length (even empty)
+  repairNeeded: z.string().optional(),
+  initialSummary: z.string().optional(),
+
   paymentStatus: paymentStatusEnum,
   shippingCost: z.number().min(0, "Shipping cost must be positive"),
   shippedDate: z.string().optional(),
   receivedDate: z.string().optional(),
-  initialSummary: z.string().min(10, "Initial summary must be at least 10 characters"),
 });
+
 
 export const updateProductCaseSchema = insertProductCaseSchema.partial();
 
