@@ -1,0 +1,479 @@
+import { useState } from "react";
+import { useParams, useLocation, Link } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { DashboardLayout } from "@/components/dashboard-layout";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { insertProductCaseSchema, type InsertProductCase, type CustomerWithCases, caseStatusEnum, paymentStatusEnum } from "@shared/schema";
+import { Plus, Mail, Phone, MapPin, Trash2, Calendar, DollarSign } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { format } from "date-fns";
+
+export default function CustomerProfilePage() {
+  const { id } = useParams();
+  const [, setLocation] = useLocation();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [deleteCustomerId, setDeleteCustomerId] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const { data: customer, isLoading } = useQuery<CustomerWithCases>({
+    queryKey: ['/api/customers', id],
+    enabled: !!id,
+  });
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<InsertProductCase>({
+    resolver: zodResolver(insertProductCaseSchema),
+    defaultValues: {
+      customerId: id,
+      status: "New Case",
+      paymentStatus: "Pending",
+      shippingCost: 0,
+    },
+  });
+
+  const createCaseMutation = useMutation({
+    mutationFn: async (data: InsertProductCase) => {
+      return await apiRequest("POST", "/api/cases", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/customers', id] });
+      toast({
+        title: "Success",
+        description: "Product case created successfully",
+      });
+      setIsDialogOpen(false);
+      reset({
+        customerId: id,
+        status: "New Case",
+        paymentStatus: "Pending",
+        shippingCost: 0,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteCustomerMutation = useMutation({
+    mutationFn: async (customerId: string) => {
+      return await apiRequest("DELETE", `/api/customers/${customerId}`, undefined);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Customer deleted successfully",
+      });
+      setLocation("/customers");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (data: InsertProductCase) => {
+    createCaseMutation.mutate(data);
+  };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout title="Customer Profile">
+        <div className="p-6 max-w-7xl mx-auto">
+          <div className="h-64 bg-muted animate-pulse rounded-lg" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!customer) {
+    return (
+      <DashboardLayout title="Customer Not Found">
+        <div className="p-6 max-w-7xl mx-auto">
+          <Card>
+            <CardContent className="py-12 text-center">
+              <p className="text-muted-foreground">Customer not found</p>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  return (
+    <DashboardLayout
+      title={customer.name}
+      actions={
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setDeleteCustomerId(customer._id)}
+            data-testid="button-delete-customer"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete Customer
+          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-case">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Product Case
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Register New Product Case</DialogTitle>
+                <DialogDescription>
+                  Add a new product case for {customer.name}
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="modelNumber">Model Number</Label>
+                    <Input
+                      id="modelNumber"
+                      data-testid="input-model-number"
+                      {...register("modelNumber")}
+                      className={errors.modelNumber ? "border-destructive" : ""}
+                    />
+                    {errors.modelNumber && (
+                      <p className="text-sm text-destructive">{errors.modelNumber.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="serialNumber">Serial Number</Label>
+                    <Input
+                      id="serialNumber"
+                      data-testid="input-serial-number"
+                      {...register("serialNumber")}
+                      className={errors.serialNumber ? "border-destructive" : ""}
+                    />
+                    {errors.serialNumber && (
+                      <p className="text-sm text-destructive">{errors.serialNumber.message}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="purchasePlace">Purchase Place</Label>
+                    <Input
+                      id="purchasePlace"
+                      data-testid="input-purchase-place"
+                      {...register("purchasePlace")}
+                      className={errors.purchasePlace ? "border-destructive" : ""}
+                    />
+                    {errors.purchasePlace && (
+                      <p className="text-sm text-destructive">{errors.purchasePlace.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="dateOfPurchase">Date of Purchase</Label>
+                    <Input
+                      id="dateOfPurchase"
+                      type="date"
+                      data-testid="input-date-of-purchase"
+                      {...register("dateOfPurchase")}
+                      className={errors.dateOfPurchase ? "border-destructive" : ""}
+                    />
+                    {errors.dateOfPurchase && (
+                      <p className="text-sm text-destructive">{errors.dateOfPurchase.message}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="receiptNumber">Receipt Number</Label>
+                  <Input
+                    id="receiptNumber"
+                    data-testid="input-receipt-number"
+                    {...register("receiptNumber")}
+                    className={errors.receiptNumber ? "border-destructive" : ""}
+                  />
+                  {errors.receiptNumber && (
+                    <p className="text-sm text-destructive">{errors.receiptNumber.message}</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={watch("status")}
+                      onValueChange={(value) => setValue("status", value as any)}
+                    >
+                      <SelectTrigger data-testid="select-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {caseStatusEnum.options.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="paymentStatus">Payment Status</Label>
+                    <Select
+                      value={watch("paymentStatus")}
+                      onValueChange={(value) => setValue("paymentStatus", value as any)}
+                    >
+                      <SelectTrigger data-testid="select-payment-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {paymentStatusEnum.options.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="repairNeeded">Repair Needed</Label>
+                  <Textarea
+                    id="repairNeeded"
+                    data-testid="input-repair-needed"
+                    rows={3}
+                    {...register("repairNeeded")}
+                    className={errors.repairNeeded ? "border-destructive" : ""}
+                  />
+                  {errors.repairNeeded && (
+                    <p className="text-sm text-destructive">{errors.repairNeeded.message}</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="shippingCost">Shipping Cost ($)</Label>
+                    <Input
+                      id="shippingCost"
+                      type="number"
+                      step="0.01"
+                      data-testid="input-shipping-cost"
+                      {...register("shippingCost", { valueAsNumber: true })}
+                      className={errors.shippingCost ? "border-destructive" : ""}
+                    />
+                    {errors.shippingCost && (
+                      <p className="text-sm text-destructive">{errors.shippingCost.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="receivedDate">Received Date</Label>
+                    <Input
+                      id="receivedDate"
+                      type="date"
+                      data-testid="input-received-date"
+                      {...register("receivedDate")}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="shippedDate">Shipped Date</Label>
+                    <Input
+                      id="shippedDate"
+                      type="date"
+                      data-testid="input-shipped-date"
+                      {...register("shippedDate")}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="initialSummary">Initial Summary</Label>
+                  <Textarea
+                    id="initialSummary"
+                    data-testid="input-initial-summary"
+                    rows={4}
+                    placeholder="Why are we opening this case?"
+                    {...register("initialSummary")}
+                    className={errors.initialSummary ? "border-destructive" : ""}
+                  />
+                  {errors.initialSummary && (
+                    <p className="text-sm text-destructive">{errors.initialSummary.message}</p>
+                  )}
+                </div>
+
+                <div className="flex gap-2 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsDialogOpen(false)}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="flex-1"
+                    disabled={createCaseMutation.isPending}
+                    data-testid="button-submit-case"
+                  >
+                    {createCaseMutation.isPending ? "Creating..." : "Create Case"}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      }
+    >
+      <div className="p-6 max-w-7xl mx-auto space-y-6">
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-mono text-muted-foreground">{customer.customerId}</p>
+        </div>
+
+        <Tabs defaultValue="info" className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="info" data-testid="tab-customer-info">Customer Info</TabsTrigger>
+            <TabsTrigger value="cases" data-testid="tab-product-cases">
+              Product Cases ({customer.cases?.length || 0})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="info" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Customer Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <Mail className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Email</p>
+                    <p className="font-medium">{customer.email}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Phone className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Phone</p>
+                    <p className="font-medium">{customer.phone}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <MapPin className="h-5 w-5 text-muted-foreground mt-1" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Address</p>
+                    <p className="font-medium">{customer.address}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="cases" className="mt-6">
+            {customer.cases && customer.cases.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {customer.cases.map((case_) => (
+                  <Link key={case_._id} href={`/cases/${case_._id}`}>
+                    <Card className="hover-elevate cursor-pointer" data-testid={`case-card-${case_._id}`}>
+                      <CardContent className="pt-6 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold font-mono truncate">{case_.modelNumber}</p>
+                            <p className="text-sm text-muted-foreground font-mono">S/N: {case_.serialNumber}</p>
+                          </div>
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                            case_.status === 'New Case' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
+                            case_.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300' :
+                            case_.status === 'Awaiting Parts' ? 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300' :
+                            case_.status === 'Repair Completed' ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' :
+                            case_.status === 'Shipped to Customer' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
+                            'bg-gray-100 text-gray-800 dark:bg-gray-950 dark:text-gray-300'
+                          }`}>
+                            {case_.status}
+                          </span>
+                        </div>
+                        <p className="text-sm line-clamp-2">{case_.repairNeeded}</p>
+                        <div className="flex items-center justify-between text-sm text-muted-foreground pt-2 border-t">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {format(new Date(case_.createdAt), 'MMM dd, yyyy')}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <DollarSign className="h-3 w-3" />
+                            {case_.shippingCost.toFixed(2)}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <p className="text-muted-foreground">No product cases yet</p>
+                  <p className="text-sm text-muted-foreground">Create one to get started</p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      <AlertDialog open={!!deleteCustomerId} onOpenChange={() => setDeleteCustomerId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Customer</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this customer and all their product cases? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteCustomerId && deleteCustomerMutation.mutate(deleteCustomerId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </DashboardLayout>
+  );
+}
