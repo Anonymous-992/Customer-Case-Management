@@ -40,9 +40,7 @@ export default function AdminManagementPage() {
     formState: { errors },
   } = useForm<InsertAdmin>({
     resolver: zodResolver(insertAdminSchema),
-    defaultValues: {
-      role: 'subadmin',
-    },
+    defaultValues: { role: 'subadmin' },
   });
 
   const createAdminMutation = useMutation({
@@ -51,19 +49,12 @@ export default function AdminManagementPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admins'] });
-      toast({
-        title: "Success",
-        description: "Sub-admin created successfully",
-      });
+      toast({ title: "Success", description: "Sub-admin created successfully" });
       setIsDialogOpen(false);
       reset();
     },
     onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -73,125 +64,75 @@ export default function AdminManagementPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admins'] });
-      toast({
-        title: "Success",
-        description: "Sub-admin deleted successfully",
-      });
+      toast({ title: "Success", description: "Sub-admin deleted successfully" });
       setDeleteAdminId(null);
     },
     onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
-  const onSubmit = (data: InsertAdmin) => {
-    createAdminMutation.mutate(data);
-  };
+  const onSubmit = (data: InsertAdmin) => createAdminMutation.mutate(data);
 
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
+  const getInitials = (name: string) =>
+    name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
   const subAdmins = admins?.filter(a => a.role === 'subadmin') || [];
 
   return (
-    <DashboardLayout 
-      title="Admin Management"
-      actions={
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-add-admin">
-              <UserPlus className="h-4 w-4 mr-2" />
-              Add Sub-Admin
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Create Sub-Admin</DialogTitle>
-              <DialogDescription>
-                Add a new sub-admin to the system
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
-                <Input
-                  id="name"
-                  data-testid="input-admin-name"
-                  {...register("name")}
-                  className={errors.name ? "border-destructive" : ""}
-                />
-                {errors.name && (
-                  <p className="text-sm text-destructive">{errors.name.message}</p>
-                )}
-              </div>
+    <DashboardLayout
+      title={
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <h1 className="text-2xl font-semibold">Admin Management</h1>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-admin" className="w-[90%]  sm:w-auto ml-2 self-center sm:self-auto">
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add Sub-Admin
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Create Sub-Admin</DialogTitle>
+                <DialogDescription>Add a new sub-admin to the system</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Full Name</Label>
+                  <Input id="name" {...register("name")} className={errors.name ? "border-destructive" : ""} />
+                  {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
-                <Input
-                  id="username"
-                  data-testid="input-admin-username"
-                  {...register("username")}
-                  className={errors.username ? "border-destructive" : ""}
-                />
-                {errors.username && (
-                  <p className="text-sm text-destructive">{errors.username.message}</p>
-                )}
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username</Label>
+                  <Input id="username" {...register("username")} className={errors.username ? "border-destructive" : ""} />
+                  {errors.username && <p className="text-sm text-destructive">{errors.username.message}</p>}
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  data-testid="input-admin-email"
-                  {...register("email")}
-                  className={errors.email ? "border-destructive" : ""}
-                />
-                {errors.email && (
-                  <p className="text-sm text-destructive">{errors.email.message}</p>
-                )}
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" type="email" {...register("email")} className={errors.email ? "border-destructive" : ""} />
+                  {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  data-testid="input-admin-password"
-                  {...register("password")}
-                  className={errors.password ? "border-destructive" : ""}
-                />
-                {errors.password && (
-                  <p className="text-sm text-destructive">{errors.password.message}</p>
-                )}
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input id="password" type="password" {...register("password")} className={errors.password ? "border-destructive" : ""} />
+                  {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+                </div>
 
-              <div className="flex gap-2 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsDialogOpen(false)}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  className="flex-1"
-                  disabled={createAdminMutation.isPending}
-                  data-testid="button-submit-admin"
-                >
-                  {createAdminMutation.isPending ? "Creating..." : "Create Admin"}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <div className="flex gap-2 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="flex-1">
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="flex-1" disabled={createAdminMutation.isPending}>
+                    {createAdminMutation.isPending ? "Creating..." : "Create Admin"}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       }
     >
       <div className="p-6 max-w-7xl mx-auto">
@@ -211,7 +152,7 @@ export default function AdminManagementPage() {
                 {subAdmins.map((admin) => (
                   <div
                     key={admin._id}
-                    className="flex items-center justify-between p-4 rounded-lg border border-border hover-elevate"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-lg border border-border hover-elevate"
                     data-testid={`admin-${admin._id}`}
                   >
                     <div className="flex items-center gap-3">
@@ -226,8 +167,8 @@ export default function AdminManagementPage() {
                         <p className="text-sm text-muted-foreground">{admin.email}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-medium">
+                    <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-3 flex-wrap">
+                      <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-medium whitespace-nowrap">
                         Sub-Admin
                       </span>
                       <Button

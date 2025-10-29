@@ -179,7 +179,7 @@ export default function CaseDetailPage() {
     <DashboardLayout
       title="Case Details"
       actions={
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 ">
           {!isEditing ? (
             <>
               <Button

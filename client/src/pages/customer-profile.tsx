@@ -143,228 +143,250 @@ const deleteCustomerMutation = useMutation({
     <DashboardLayout
       title={customer.name}
       actions={
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setDeleteCustomerId(customer._id)}
-            data-testid="button-delete-customer"
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete Customer
-          </Button>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-case">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Product Case
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Register New Product Case</DialogTitle>
-                <DialogDescription>
-                  Add a new product case for {customer.name}
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="modelNumber">Model Number</Label>
-                    <Input
-                      id="modelNumber"
-                      data-testid="input-model-number"
-                      {...register("modelNumber")}
-                      className={errors.modelNumber ? "border-destructive" : ""}
-                    />
-                    {errors.modelNumber && (
-                      <p className="text-sm text-destructive">{errors.modelNumber.message}</p>
-                    )}
-                  </div>
+        <div className="flex flex-col sm:flex-row gap-2 w-full">
+  <Button
+    variant="outline"
+    onClick={() => setDeleteCustomerId(customer._id)}
+    data-testid="button-delete-customer"
+    className="w-full sm:w-auto"
+  >
+    <Trash2 className="h-4 w-4 mr-2" />
+    Delete Customer
+  </Button>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="serialNumber">Serial Number</Label>
-                    <Input
-                      id="serialNumber"
-                      data-testid="input-serial-number"
-                      {...register("serialNumber")}
-                      className={errors.serialNumber ? "border-destructive" : ""}
-                    />
-                    {errors.serialNumber && (
-                      <p className="text-sm text-destructive">{errors.serialNumber.message}</p>
-                    )}
-                  </div>
-                </div>
+  <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+    <DialogTrigger asChild>
+      <Button data-testid="button-add-case" className="w-full sm:w-auto">
+        <Plus className="h-4 w-4 mr-2" />
+        Add Product Case
+      </Button>
+    </DialogTrigger>
+    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle>Register New Product Case</DialogTitle>
+        <DialogDescription>
+          Add a new product case for {customer.name}
+        </DialogDescription>
+      </DialogHeader>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="purchasePlace">Purchase Place</Label>
-                    <Input
-                      id="purchasePlace"
-                      data-testid="input-purchase-place"
-                      {...register("purchasePlace")}
-                      className={errors.purchasePlace ? "border-destructive" : ""}
-                    />
-                    {errors.purchasePlace && (
-                      <p className="text-sm text-destructive">{errors.purchasePlace.message}</p>
-                    )}
-                  </div>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="modelNumber">Model Number</Label>
+            <Input
+              id="modelNumber"
+              data-testid="input-model-number"
+              {...register("modelNumber")}
+              className={errors.modelNumber ? "border-destructive" : ""}
+            />
+            {errors.modelNumber && (
+              <p className="text-sm text-destructive">
+                {errors.modelNumber.message}
+              </p>
+            )}
+          </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="dateOfPurchase">Date of Purchase</Label>
-                    <Input
-                      id="dateOfPurchase"
-                      type="date"
-                      data-testid="input-date-of-purchase"
-                      {...register("dateOfPurchase")}
-                      className={errors.dateOfPurchase ? "border-destructive" : ""}
-                    />
-                    {errors.dateOfPurchase && (
-                      <p className="text-sm text-destructive">{errors.dateOfPurchase.message}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="receiptNumber">Receipt Number</Label>
-                  <Input
-                    id="receiptNumber"
-                    data-testid="input-receipt-number"
-                    {...register("receiptNumber")}
-                    className={errors.receiptNumber ? "border-destructive" : ""}
-                  />
-                  {errors.receiptNumber && (
-                    <p className="text-sm text-destructive">{errors.receiptNumber.message}</p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="status">Status</Label>
-                    <Select
-                      value={watch("status")}
-                      onValueChange={(value) => setValue("status", value as any)}
-                    >
-                      <SelectTrigger data-testid="select-status">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {caseStatusEnum.options.map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="paymentStatus">Payment Status</Label>
-                    <Select
-                      value={watch("paymentStatus")}
-                      onValueChange={(value) => setValue("paymentStatus", value as any)}
-                    >
-                      <SelectTrigger data-testid="select-payment-status">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {paymentStatusEnum.options.map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="repairNeeded">Repair Needed</Label>
-                  <Textarea
-                    id="repairNeeded"
-                    data-testid="input-repair-needed"
-                    rows={3}
-                    {...register("repairNeeded")}
-                    className={errors.repairNeeded ? "border-destructive" : ""}
-                  />
-                  {errors.repairNeeded && (
-                    <p className="text-sm text-destructive">{errors.repairNeeded.message}</p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="shippingCost">Shipping Cost ($)</Label>
-                    <Input
-                      id="shippingCost"
-                      type="number"
-                      step="0.01"
-                      data-testid="input-shipping-cost"
-                      {...register("shippingCost", { valueAsNumber: true })}
-                      className={errors.shippingCost ? "border-destructive" : ""}
-                    />
-                    {errors.shippingCost && (
-                      <p className="text-sm text-destructive">{errors.shippingCost.message}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="receivedDate">Received Date</Label>
-                    <Input
-                      id="receivedDate"
-                      type="date"
-                      data-testid="input-received-date"
-                      {...register("receivedDate")}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="shippedDate">Shipped Date</Label>
-                    <Input
-                      id="shippedDate"
-                      type="date"
-                      data-testid="input-shipped-date"
-                      {...register("shippedDate")}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="initialSummary">Initial Summary</Label>
-                  <Textarea
-                    id="initialSummary"
-                    data-testid="input-initial-summary"
-                    rows={4}
-                    placeholder="Why are we opening this case?"
-                    {...register("initialSummary")}
-                    className={errors.initialSummary ? "border-destructive" : ""}
-                  />
-                  {errors.initialSummary && (
-                    <p className="text-sm text-destructive">{errors.initialSummary.message}</p>
-                  )}
-                </div>
-
-                <div className="flex gap-2 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsDialogOpen(false)}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    className="flex-1"
-                    disabled={createCaseMutation.isPending}
-                    data-testid="button-submit-case"
-                  >
-                    {createCaseMutation.isPending ? "Creating..." : "Create Case"}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <div className="space-y-2">
+            <Label htmlFor="serialNumber">Serial Number</Label>
+            <Input
+              id="serialNumber"
+              data-testid="input-serial-number"
+              {...register("serialNumber")}
+              className={errors.serialNumber ? "border-destructive" : ""}
+            />
+            {errors.serialNumber && (
+              <p className="text-sm text-destructive">
+                {errors.serialNumber.message}
+              </p>
+            )}
+          </div>
         </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="purchasePlace">Purchase Place</Label>
+            <Input
+              id="purchasePlace"
+              data-testid="input-purchase-place"
+              {...register("purchasePlace")}
+              className={errors.purchasePlace ? "border-destructive" : ""}
+            />
+            {errors.purchasePlace && (
+              <p className="text-sm text-destructive">
+                {errors.purchasePlace.message}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="dateOfPurchase">Date of Purchase</Label>
+            <Input
+              id="dateOfPurchase"
+              type="date"
+              data-testid="input-date-of-purchase"
+              {...register("dateOfPurchase")}
+              className={errors.dateOfPurchase ? "border-destructive" : ""}
+            />
+            {errors.dateOfPurchase && (
+              <p className="text-sm text-destructive">
+                {errors.dateOfPurchase.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="receiptNumber">Receipt Number</Label>
+          <Input
+            id="receiptNumber"
+            data-testid="input-receipt-number"
+            {...register("receiptNumber")}
+            className={errors.receiptNumber ? "border-destructive" : ""}
+          />
+          {errors.receiptNumber && (
+            <p className="text-sm text-destructive">
+              {errors.receiptNumber.message}
+            </p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="status">Status</Label>
+            <Select
+              value={watch("status")}
+              onValueChange={(value) => setValue("status", value as any)}
+            >
+              <SelectTrigger data-testid="select-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {caseStatusEnum.options.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="paymentStatus">Payment Status</Label>
+            <Select
+              value={watch("paymentStatus")}
+              onValueChange={(value) =>
+                setValue("paymentStatus", value as any)
+              }
+            >
+              <SelectTrigger data-testid="select-payment-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {paymentStatusEnum.options.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="repairNeeded">Repair Needed</Label>
+          <Textarea
+            id="repairNeeded"
+            data-testid="input-repair-needed"
+            rows={3}
+            {...register("repairNeeded")}
+            className={errors.repairNeeded ? "border-destructive" : ""}
+          />
+          {errors.repairNeeded && (
+            <p className="text-sm text-destructive">
+              {errors.repairNeeded.message}
+            </p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="shippingCost">Shipping Cost ($)</Label>
+            <Input
+              id="shippingCost"
+              type="number"
+              step="0.01"
+              data-testid="input-shipping-cost"
+              {...register("shippingCost", { valueAsNumber: true })}
+              className={errors.shippingCost ? "border-destructive" : ""}
+            />
+            {errors.shippingCost && (
+              <p className="text-sm text-destructive">
+                {errors.shippingCost.message}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="receivedDate">Received Date</Label>
+            <Input
+              id="receivedDate"
+              type="date"
+              data-testid="input-received-date"
+              {...register("receivedDate")}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="shippedDate">Shipped Date</Label>
+            <Input
+              id="shippedDate"
+              type="date"
+              data-testid="input-shipped-date"
+              {...register("shippedDate")}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="initialSummary">Initial Summary</Label>
+          <Textarea
+            id="initialSummary"
+            data-testid="input-initial-summary"
+            rows={4}
+            placeholder="Why are we opening this case?"
+            {...register("initialSummary")}
+            className={errors.initialSummary ? "border-destructive" : ""}
+          />
+          {errors.initialSummary && (
+            <p className="text-sm text-destructive">
+              {errors.initialSummary.message}
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-2 pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsDialogOpen(false)}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            className="flex-1"
+            disabled={createCaseMutation.isPending}
+            data-testid="button-submit-case"
+          >
+            {createCaseMutation.isPending ? "Creating..." : "Create Case"}
+          </Button>
+        </div>
+      </form>
+    </DialogContent>
+  </Dialog>
+</div>
+
       }
     >
       <div className="p-6 max-w-7xl mx-auto space-y-6">
