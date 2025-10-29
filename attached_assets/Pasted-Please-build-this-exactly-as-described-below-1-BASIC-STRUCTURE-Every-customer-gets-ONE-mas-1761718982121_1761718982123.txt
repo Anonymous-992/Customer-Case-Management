@@ -1,0 +1,134 @@
+Please build this exactly as described below.
+
+1. BASIC STRUCTURE
+
+· Every customer gets ONE master profile.
+· Each customer profile can have MULTIPLE product cases inside it.
+· Never create a new customer profile if the customer already exists.
+
+2. CUSTOMER PROFILE CREATION
+
+When adding a new customer, we need this form:
+
+FORM: ADD NEW CUSTOMER
+
+· Customer Name (text field)
+· Phone Number (phone field)
+· Address (text area)
+· Email Address (email field)
+
+After saving, the system should:
+
+· Generate a unique Customer ID (like CUST-1001)
+· Open the customer's profile page
+
+---
+
+3. CUSTOMER PROFILE PAGE LAYOUT
+
+The customer profile page should have:
+
+TOP SECTION:
+
+· Customer Name
+· Customer ID
+· "Add New Product Case" button
+
+TWO TABS:
+
+1. Customer Info Tab - Shows the basic customer details
+2. Product Cases Tab - Lists all product cases for this customer
+
+---
+
+4. ADDING A PRODUCT CASE
+
+When clicking "Add New Product Case", show this form:
+
+FORM: REGISTER NEW PRODUCT CASE
+
+· Model Number (text)
+· Serial Number (text)
+· Purchase Place (text) - where they bought it
+· Date of Purchase (date picker)
+· Receipt Number (text)
+· Status (dropdown): New Case, In Progress, Awaiting Parts, Repair Completed, Shipped to Customer, Closed
+· Repair Needed (text area) - what's wrong with the product
+· Payment Status (dropdown): Pending, Paid by Customer, Under Warranty, Company Covered
+· Shipping Cost (number field)
+· Shipped Date (date picker) - when we shipped it
+· Received Date (date picker) - when we received it
+· Initial Summary (text area) - why we're opening this case
+
+---
+
+5. PRODUCT CASE PAGE & HISTORY
+
+Each product case should have its own page with:
+
+CASE HEADER:
+
+· Shows: Model Number, Serial Number, Current Status
+
+CASE DETAILS SECTION:
+
+· Shows all the information from the form above
+
+INTERACTION HISTORY TIMELINE:
+This is the MOST IMPORTANT part.We need a chronological log where:
+
+· Every entry is automatically stamped with date and time
+· Every entry shows which staff member made it
+· We can add new notes easily
+
+How it should work:
+
+1. Staff member writes in the "Phone Call Summary / Update" box
+2. Clicks "Save Update"
+3. System automatically adds:
+   · Current date and time
+   · Staff member's name
+   · The note they wrote
+   . Avatar of uuser
+	
+
+Example of how it should look:
+
+
+2023-11-05 14:20:00 - Update by Alice (Admin)
+Customer called for status update. Informed them parts arrived and repair starts today.
+
+2023-11-02 09:15:00 - Update by Bob (Tech)  
+Diagnosed issue. Required part #XYZ is out of stock. Ordered, expected in 3-5 days.
+
+2023-10-26 16:45:00 - Update by Alice (Admin)
+Case created. Product received and assigned to technical team.
+
+
+---
+
+6. TECHNICAL REQUIREMENTS
+
+· Automatic timestamps on every update
+· Track which staff member makes each update
+· Link product cases to customer profiles
+· Status dropdowns as specified above
+· Search customers by name, phone, email, or Customer ID
+
+---
+
+7. SUMMARY
+
+We need:
+
+there should be only 1 login page with fixed superadmin credentials. Super admin has all these features and he can also change password name avatar after being logged in to dashboard. Then super admin has access to create sub admins with username email and password and they should show in super admin dashboard and super admin can add delete them. Then when sub admin is created he also has same functionality to add customer case add customer and everything change his credentials avatar password and when the summary or not is updated in customer case it will show the name of that one user who created it along with avatar and time stamp.
+· Customer profiles with basic info and also delete profile button to delete that profile (available for all sub admins and super admin)
+.Responsive webapp across all devices
+· Ability to add multiple product cases per customer and delete button to delete that particular case (available for all sub admins and super admin)
+· Detailed case information for each product (available for all sub admins  and super admin)
+· Automatic interaction history with timestamps for each action who updated status or added note or deleted something (available for all sub admins and super admin)
+· Status tracking for each case (available for all sub admins and super admin)
+
+Please build this exactly as described. Let me know if you have any questions.
+Use react and JSX for frontend and nodejs express js on backend and for database use mongoDB. And most importantly if mongodb is not available then write code in such a way that it can easily run on localhost with mongodb compass and then it can be easily deployed on render.
+
