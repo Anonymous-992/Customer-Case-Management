@@ -6,6 +6,10 @@ export interface ICustomer extends Document {
   phone: string;
   address: string;
   email: string;
+  notificationPreferences?: {
+    email: boolean;
+    sms: boolean;
+  };
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -36,6 +40,16 @@ const CustomerSchema = new Schema<ICustomer>({
     required: true,
     trim: true,
     lowercase: true,
+  },
+  notificationPreferences: {
+    email: {
+      type: Boolean,
+      default: true,
+    },
+    sms: {
+      type: Boolean,
+      default: false,
+    },
   },
   createdBy: {
     type: Schema.Types.ObjectId,

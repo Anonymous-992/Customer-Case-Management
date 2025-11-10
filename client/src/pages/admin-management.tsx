@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DashboardLayout } from "@/components/dashboard-layout";
+import { Breadcrumb } from "@/components/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -81,16 +82,15 @@ export default function AdminManagementPage() {
 
   return (
     <DashboardLayout
-      title={
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <h1 className="text-2xl font-semibold">Admin Management</h1>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-admin" className="w-[90%]  sm:w-auto ml-2 self-center sm:self-auto">
-                <UserPlus className="h-4 w-4 mr-2" />
-                Add Sub-Admin
-              </Button>
-            </DialogTrigger>
+      title="Admin Management"
+      actions={
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button data-testid="button-add-admin">
+              <UserPlus className="h-4 w-4 mr-2" />
+              Add Sub-Admin
+            </Button>
+          </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Create Sub-Admin</DialogTitle>
@@ -131,11 +131,11 @@ export default function AdminManagementPage() {
                 </div>
               </form>
             </DialogContent>
-          </Dialog>
-        </div>
+        </Dialog>
       }
     >
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="p-6 max-w-7xl mx-auto space-y-6">
+        <Breadcrumb items={[{ label: "Admin Management" }]} />
         <Card>
           <CardHeader>
             <CardTitle>Sub-Administrators ({subAdmins.length})</CardTitle>

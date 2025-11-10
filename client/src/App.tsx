@@ -4,7 +4,9 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { SettingsProvider } from "@/lib/settings-context";
 import { ProtectedRoute } from "@/components/protected-route";
+import { Preloader } from "@/components/preloader";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
 import CustomersPage from "@/pages/customers";
@@ -12,6 +14,9 @@ import CustomerProfilePage from "@/pages/customer-profile";
 import CaseDetailPage from "@/pages/case-detail";
 import AdminManagementPage from "@/pages/admin-management";
 import ProfilePage from "@/pages/profile";
+import ReportsPage from "@/pages/reports";
+import RemindersPage from "@/pages/reminders";
+import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -67,6 +72,24 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
+      <Route path="/reports">
+        <ProtectedRoute requireSuperAdmin>
+          <ReportsPage />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/reminders">
+        <ProtectedRoute>
+          <RemindersPage />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/settings">
+        <ProtectedRoute>
+          <SettingsPage />
+        </ProtectedRoute>
+      </Route>
+
       <Route component={NotFound} />
     </Switch>
   );
@@ -77,8 +100,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <Toaster />
-          <Router />
+          <SettingsProvider>
+            <Preloader />
+            <Toaster />
+            <Router />
+          </SettingsProvider>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>

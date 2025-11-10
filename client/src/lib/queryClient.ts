@@ -47,7 +47,27 @@ export const getQueryFn: <T>(options: {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const res = await fetch(queryKey.join("/") as string, {
+    // Build URL with query parameters
+    const stringParts: string[] = [];
+    const params: Record<string, string> = {};
+    
+    for (let i = 0; i < queryKey.length; i++) {
+      const part = queryKey[i];
+      if (typeof part === 'string') {
+        stringParts.push(part);
+      } else if (typeof part === 'object' && part !== null) {
+        Object.assign(params, part);
+      }
+    }
+    
+    // Join string parts to form base URL
+    const url = stringParts.join('/');
+    
+    // Add query parameters to URL
+    const queryParams = new URLSearchParams(params).toString();
+    const fullUrl = queryParams ? `${url}?${queryParams}` : url;
+
+    const res = await fetch(fullUrl, {
       headers,
       credentials: "include",
     });

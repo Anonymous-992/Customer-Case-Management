@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DashboardLayout } from "@/components/dashboard-layout";
+import { Breadcrumb } from "@/components/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,7 +16,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { insertProductCaseSchema, type InsertProductCase, type CustomerWithCases, caseStatusEnum, paymentStatusEnum } from "@shared/schema";
-import { Plus, Mail, Phone, MapPin, Trash2, Calendar, DollarSign } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { Plus, Mail, Phone, MapPin, Trash2, Calendar, DollarSign, AlertCircle, Bell, BellOff } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import confetti from "canvas-confetti";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,8 +35,14 @@ import { format } from "date-fns";
 export default function CustomerProfilePage() {
   const { id } = useParams();
   const [, setLocation] = useLocation();
+  const { admin } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [deleteCustomerId, setDeleteCustomerId] = useState<string | null>(null);
+  const [serialValue, setSerialValue] = useState("");
+  const [serialError, setSerialError] = useState<string>("");
+  const [isCheckingSerial, setIsCheckingSerial] = useState(false);
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [smsNotifications, setSmsNotifications] = useState(false);
   const { toast } = useToast();
 
   const { data: customer, isLoading } = useQuery<CustomerWithCases>({
@@ -57,22 +67,127 @@ export default function CustomerProfilePage() {
     },
   });
 
+  // Debounced serial number check
+  useEffect(() => {
+    const checkSerial = async () => {
+      if (serialValue.length < 3) {
+        setSerialError("");
+        return;
+      }
+
+      setIsCheckingSerial(true);
+      try {
+        const response = await fetch(`/api/cases/check-serial/${encodeURIComponent(serialValue)}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+        });
+        const data = await response.json();
+        
+        if (data.exists) {
+          setSerialError(`Serial number already exists for product: ${data.case.modelNumber}`);
+        } else {
+          setSerialError("");
+        }
+      } catch (error) {
+        console.error('Error checking serial:', error);
+      } finally {
+        setIsCheckingSerial(false);
+      }
+    };
+
+    const timer = setTimeout(checkSerial, 500); // Debounce 500ms
+    return () => clearTimeout(timer);
+  }, [serialValue]);
+
+  // Sync notification preferences with customer data
+  useEffect(() => {
+    if (customer?.notificationPreferences) {
+      setEmailNotifications(customer.notificationPreferences.email ?? true);
+      setSmsNotifications(customer.notificationPreferences.sms ?? false);
+    }
+  }, [customer]);
+
+  // Reset serial validation when dialog closes
+  useEffect(() => {
+    if (!isDialogOpen) {
+      setSerialValue("");
+      setSerialError("");
+      reset({
+        customerId: id,
+        status: "New Case",
+        paymentStatus: "Pending",
+        shippingCost: 0,
+      });
+    }
+  }, [isDialogOpen, reset, id]);
+
   const createCaseMutation = useMutation({
     mutationFn: async (data: InsertProductCase) => {
       return await apiRequest("POST", "/api/cases", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/customers', id] });
-      toast({
-        title: "Success",
-        description: "Product case created successfully",
+      
+      // Trigger confetti celebration
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
       });
+      
+      setTimeout(() => {
+        confetti({
+          particleCount: 50,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0 }
+        });
+      }, 250);
+      
+      setTimeout(() => {
+        confetti({
+          particleCount: 50,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1 }
+        });
+      }, 400);
+      
+      toast({
+        title: "🎉 Success!",
+        description: "Product case created successfully!",
+        className: "bg-green-50 border-green-200"
+      });
+      
       setIsDialogOpen(false);
       reset({
         customerId: id,
         status: "New Case",
         paymentStatus: "Pending",
         shippingCost: 0,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateNotificationsMutation = useMutation({
+    mutationFn: async (preferences: { email: boolean; sms: boolean }) => {
+      return await apiRequest("PATCH", `/api/customers/${id}/notifications`, {
+        notificationPreferences: preferences,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/customers', id] });
+      toast({
+        title: "Success",
+        description: "Notification preferences updated",
       });
     },
     onError: (error: Error) => {
@@ -112,6 +227,15 @@ const deleteCustomerMutation = useMutation({
 
 
   const onSubmit = (data: InsertProductCase) => {
+    // Prevent submission if serial number is duplicate
+    if (serialError) {
+      toast({
+        title: "Error",
+        description: serialError,
+        variant: "destructive",
+      });
+      return;
+    }
     createCaseMutation.mutate(data);
   };
 
@@ -191,12 +315,27 @@ const deleteCustomerMutation = useMutation({
             <Input
               id="serialNumber"
               data-testid="input-serial-number"
-              {...register("serialNumber")}
-              className={errors.serialNumber ? "border-destructive" : ""}
+              value={serialValue}
+              onChange={(e) => {
+                setSerialValue(e.target.value);
+                setValue("serialNumber", e.target.value);
+              }}
+              className={errors.serialNumber || serialError ? "border-destructive" : ""}
             />
+            {isCheckingSerial && (
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                <span className="animate-spin">⏳</span> Checking serial number...
+              </p>
+            )}
             {errors.serialNumber && (
               <p className="text-sm text-destructive">
                 {errors.serialNumber.message}
+              </p>
+            )}
+            {!errors.serialNumber && serialError && (
+              <p className="text-sm text-destructive flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {serialError}
               </p>
             )}
           </div>
@@ -376,10 +515,20 @@ const deleteCustomerMutation = useMutation({
           <Button
             type="submit"
             className="flex-1"
-            disabled={createCaseMutation.isPending}
+            disabled={createCaseMutation.isPending || !!serialError || isCheckingSerial}
             data-testid="button-submit-case"
           >
-            {createCaseMutation.isPending ? "Creating..." : "Create Case"}
+            {createCaseMutation.isPending ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span>Creating Case...</span>
+              </div>
+            ) : (
+              <>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Case
+              </>
+            )}
           </Button>
         </div>
       </form>
@@ -390,6 +539,12 @@ const deleteCustomerMutation = useMutation({
       }
     >
       <div className="p-6 max-w-7xl mx-auto space-y-6">
+        <Breadcrumb 
+          items={[
+            { label: "Customers", href: "/customers" },
+            { label: customer.name }
+          ]} 
+        />
         <div className="flex flex-col gap-2">
           <p className="text-sm font-mono text-muted-foreground">{customer.customerId}</p>
         </div>
@@ -402,7 +557,7 @@ const deleteCustomerMutation = useMutation({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="info" className="mt-6">
+          <TabsContent value="info" className="mt-6 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Customer Information</CardTitle>
@@ -427,6 +582,87 @@ const deleteCustomerMutation = useMutation({
                   <div>
                     <p className="text-sm text-muted-foreground">Address</p>
                     <p className="font-medium">{customer.address}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bell className="h-5 w-5" />
+                  Notification Preferences
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      <Label htmlFor="email-notifications" className="text-base font-medium cursor-pointer">
+                        Email Notifications
+                      </Label>
+                      {admin?.role !== 'superadmin' && (
+                        <span className="text-xs text-muted-foreground">(Admin only)</span>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Receive email updates when case status changes
+                    </p>
+                  </div>
+                  <Switch
+                    id="email-notifications"
+                    checked={emailNotifications}
+                    disabled={admin?.role !== 'superadmin'}
+                    onCheckedChange={(checked) => {
+                      if (admin?.role === 'superadmin') {
+                        setEmailNotifications(checked);
+                        updateNotificationsMutation.mutate({
+                          email: checked,
+                          sms: smsNotifications,
+                        });
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      <Label htmlFor="sms-notifications" className="text-base font-medium cursor-pointer">
+                        SMS Notifications
+                      </Label>
+                      {admin?.role !== 'superadmin' && (
+                        <span className="text-xs text-muted-foreground">(Superadmin only)</span>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Receive SMS text messages when case status changes {admin?.role !== 'superadmin' && '(Restricted to superadmin)'}
+                    </p>
+                  </div>
+                  <Switch
+                    id="sms-notifications"
+                    checked={smsNotifications}
+                    disabled={admin?.role !== 'superadmin'}
+                    onCheckedChange={(checked) => {
+                      if (admin?.role === 'superadmin') {
+                        setSmsNotifications(checked);
+                        updateNotificationsMutation.mutate({
+                          email: emailNotifications,
+                          sms: checked,
+                        });
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="pt-4 border-t">
+                  <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <Bell className="h-4 w-4 mt-0.5" />
+                    <p>
+                      Automatic notifications will be sent to <strong>{customer.email}</strong> and <strong>{customer.phone}</strong> when case status changes.
+                    </p>
                   </div>
                 </div>
               </CardContent>

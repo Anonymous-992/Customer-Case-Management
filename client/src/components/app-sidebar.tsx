@@ -1,5 +1,7 @@
-import { Users, UserCircle, LogOut, LayoutDashboard, Settings } from "lucide-react";
+import { Users, UserCircle, LogOut, LayoutDashboard, Settings, Settings2, BarChart3, Bell } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { useSettings } from "@/lib/settings-context";
 import {
   Sidebar,
   SidebarContent,
@@ -14,30 +16,58 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export function AppSidebar() {
   const { admin, logout } = useAuth();
   const [location] = useLocation();
+  const { t } = useSettings();
+
+  // Get unread reminder count
+  const { data: unreadCount } = useQuery<{ count: number }>({
+    queryKey: ['/api/reminders/unread-count'],
+    enabled: !!admin,
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
 
   const menuItems = [
     {
-      title: "Dashboard",
+      titleKey: "dashboard",
       url: "/",
       icon: LayoutDashboard,
       testId: "link-dashboard",
     },
     {
-      title: "Customers",
+      titleKey: "customers",
       url: "/customers",
       icon: Users,
       testId: "link-customers",
     },
+    {
+      titleKey: "reminders",
+      url: "/reminders",
+      icon: Bell,
+      testId: "link-reminders",
+      badge: unreadCount?.count,
+    },
     ...(admin?.role === 'superadmin' ? [{
-      title: "Admin Management",
+      titleKey: "reports",
+      url: "/reports",
+      icon: BarChart3,
+      testId: "link-reports",
+    }] : []),
+    ...(admin?.role === 'superadmin' ? [{
+      titleKey: "admins",
       url: "/admins",
       icon: Settings,
       testId: "link-admins",
     }] : []),
+    {
+      titleKey: "settings",
+      url: "/settings",
+      icon: Settings2,
+      testId: "link-settings",
+    },
   ];
 
   const getInitials = (name: string) => {
@@ -61,11 +91,19 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
+                <SidebarMenuItem key={item.titleKey}>
                   <SidebarMenuButton asChild isActive={location === item.url}>
-                    <Link href={item.url} data-testid={item.testId}>
+                    <Link href={item.url} data-testid={item.testId} className="relative">
                       <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      <span>{t(item.titleKey)}</span>
+                      {'badge' in item && item.badge && item.badge > 0 && (
+                        <Badge 
+                          variant="destructive" 
+                          className="ml-auto h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] font-semibold rounded-full animate-pulse"
+                        >
+                          {item.badge > 9 ? '9+' : item.badge}
+                        </Badge>
+                      )}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -102,7 +140,7 @@ export function AppSidebar() {
           >
             <Link href="/profile">
               <UserCircle className="h-4 w-4 mr-1" />
-              Profile
+              {t("profile")}
             </Link>
           </Button>
           <Button
@@ -110,6 +148,7 @@ export function AppSidebar() {
             size="sm"
             onClick={logout}
             data-testid="button-logout"
+            title={t("logout")}
           >
             <LogOut className="h-4 w-4" />
           </Button>

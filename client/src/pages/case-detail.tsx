@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DashboardLayout } from "@/components/dashboard-layout";
+import { Breadcrumb } from "@/components/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,10 @@ import {
   type UpdateProductCase,
   insertProductCaseSchema
 } from "@shared/schema";
-import { Trash2, Calendar, DollarSign, Package, Wrench, Link as LinkIcon } from "lucide-react";
+import { Trash2, Calendar, DollarSign, Package, Wrench, Link as LinkIcon, Download } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { useSettings } from "@/lib/settings-context";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +43,7 @@ import { z } from "zod";
 
 export default function CaseDetailPage() {
   const { id } = useParams();
+  const { formatDate, formatDateTime } = useSettings();
   const [, setLocation] = useLocation();
   const [deleteCaseId, setDeleteCaseId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -151,6 +156,98 @@ export default function CaseDetailPage() {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  // Export case details to PDF
+  const handleExportCaseDetailPDF = () => {
+    if (!caseData) return;
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Title
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("Case Details Report", pageWidth / 2, 20, { align: "center" });
+    
+    // Case ID
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Case ID: ${caseData._id}`, 14, 35);
+    
+    // Customer Information
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("Customer Information", 14, 50);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    const customerInfo = [
+      ["Name", caseData.customer.name],
+      ["Phone", caseData.customer.phone],
+      ["Email", caseData.customer.email || "N/A"],
+      ["Address", caseData.customer.address || "N/A"],
+    ];
+    autoTable(doc, {
+      startY: 55,
+      head: [],
+      body: customerInfo,
+      theme: "plain",
+      styles: { fontSize: 10 },
+      columnStyles: { 0: { fontStyle: "bold", cellWidth: 40 } },
+    });
+
+    // Case Information
+    let currentY = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("Case Information", 14, currentY);
+    currentY += 5;
+    
+    const caseInfo = [
+      ["Model Number", caseData.modelNumber],
+      ["Serial Number", caseData.serialNumber],
+      ["Status", caseData.status],
+      ["Payment Status", caseData.paymentStatus],
+      ["Store", caseData.purchasePlace || "N/A"],
+      ["Date of Purchase", formatDate(caseData.dateOfPurchase)],
+      ["Receipt Number", caseData.receiptNumber || "N/A"],
+      ["Repair Needed", caseData.repairNeeded || "N/A"],
+      ["Shipping Cost", `$${caseData.shippingCost || 0}`],
+      ["Created", formatDateTime(caseData.createdAt)],
+      ["Last Updated", formatDateTime(caseData.updatedAt)],
+    ];
+    autoTable(doc, {
+      startY: currentY,
+      head: [],
+      body: caseInfo,
+      theme: "striped",
+      styles: { fontSize: 10 },
+      columnStyles: { 0: { fontStyle: "bold", cellWidth: 50 } },
+    });
+
+    // Initial Summary
+    if (caseData.initialSummary) {
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("Initial Summary", 14, currentY);
+      currentY += 7;
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      const splitSummary = doc.splitTextToSize(caseData.initialSummary, pageWidth - 28);
+      doc.text(splitSummary, 14, currentY);
+    }
+
+    // Interaction History removed from PDF export to prevent text overlapping
+    // The full interaction history can be viewed on the case detail page
+
+    // Save PDF
+    doc.save(`case-${caseData._id}-${new Date().toISOString().split('T')[0]}.pdf`);
+    
+    toast({
+      title: "Success",
+      description: "Case details exported to PDF",
+    });
+  };
+
   if (isLoading) {
     return (
       <DashboardLayout title="Case Details">
@@ -195,6 +292,14 @@ export default function CaseDetailPage() {
               </Button>
               <Button
                 variant="outline"
+                onClick={handleExportCaseDetailPDF}
+                data-testid="button-export-pdf"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export PDF
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => setDeleteCaseId(caseData._id)}
                 data-testid="button-delete-case"
               >
@@ -223,6 +328,13 @@ export default function CaseDetailPage() {
       }
     >
       <div className="p-6 max-w-7xl mx-auto space-y-6">
+        <Breadcrumb 
+          items={[
+            { label: "Customers", href: "/customers" },
+            { label: caseData.customer.name, href: `/customers/${caseData.customer._id}` },
+            { label: `Case: ${caseData.modelNumber}` }
+          ]} 
+        />
         {/* Case Header */}
         <Card>
           <CardContent className="pt-6">

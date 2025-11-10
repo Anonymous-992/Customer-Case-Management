@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DashboardLayout } from "@/components/dashboard-layout";
+import { Breadcrumb } from "@/components/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -12,13 +13,19 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useSettings } from "@/lib/settings-context";
+import { exportData, type ExportColumn } from "@/lib/export-utils";
 import { insertCustomerSchema, type InsertCustomer, type Customer } from "@shared/schema";
-import { UserPlus, Search, Mail, Phone, MapPin, FileText } from "lucide-react";
+import { UserPlus, Search, Mail, Phone, MapPin, FileText, AlertCircle, Download } from "lucide-react";
 
 export default function CustomersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [phoneValue, setPhoneValue] = useState("");
+  const [phoneError, setPhoneError] = useState<string>("");
+  const [isCheckingPhone, setIsCheckingPhone] = useState(false);
   const { toast } = useToast();
+  const { settings, formatDate } = useSettings();
 
   const { data: customers, isLoading } = useQuery<Customer[]>({
     queryKey: ['/api/customers'],
@@ -29,9 +36,52 @@ export default function CustomersPage() {
     handleSubmit,
     reset,
     formState: { errors },
+    setValue,
   } = useForm<InsertCustomer>({
     resolver: zodResolver(insertCustomerSchema),
   });
+
+  // Debounced phone number check
+  useEffect(() => {
+    const checkPhone = async () => {
+      if (phoneValue.length < 10) {
+        setPhoneError("");
+        return;
+      }
+
+      setIsCheckingPhone(true);
+      try {
+        const response = await fetch(`/api/customers/check-phone/${encodeURIComponent(phoneValue)}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+        });
+        const data = await response.json();
+        
+        if (data.exists) {
+          setPhoneError(`Phone number already exists for ${data.customer.name} (${data.customer.customerId})`);
+        } else {
+          setPhoneError("");
+        }
+      } catch (error) {
+        console.error('Error checking phone:', error);
+      } finally {
+        setIsCheckingPhone(false);
+      }
+    };
+
+    const timer = setTimeout(checkPhone, 500); // Debounce 500ms
+    return () => clearTimeout(timer);
+  }, [phoneValue]);
+
+  // Reset phone validation when dialog closes
+  useEffect(() => {
+    if (!isDialogOpen) {
+      setPhoneValue("");
+      setPhoneError("");
+      reset();
+    }
+  }, [isDialogOpen, reset]);
 
   const createCustomerMutation = useMutation({
     mutationFn: async (data: InsertCustomer) => {
@@ -56,7 +106,54 @@ export default function CustomersPage() {
   });
 
   const onSubmit = (data: InsertCustomer) => {
+    // Prevent submission if phone number is duplicate
+    if (phoneError) {
+      toast({
+        title: "Error",
+        description: phoneError,
+        variant: "destructive",
+      });
+      return;
+    }
     createCustomerMutation.mutate(data);
+  };
+
+  // Export function for customers
+  const handleExportCustomers = (format: "excel" | "pdf") => {
+    if (!filteredCustomers || filteredCustomers.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No customers to export",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const columns: ExportColumn[] = [
+      { key: "customerId", label: "Customer ID" },
+      { key: "name", label: "Name" },
+      { key: "phone", label: "Phone" },
+      { key: "email", label: "Email" },
+      { key: "address", label: "Address" },
+      { 
+        key: "createdAt", 
+        label: "Registered", 
+        format: (date) => formatDate(date)
+      },
+    ];
+
+    exportData(format, {
+      filename: `customers-export-${new Date().toISOString().split('T')[0]}`,
+      sheetName: "Customers",
+      columns,
+      data: filteredCustomers,
+      title: "Case Management - Customers Export",
+    });
+
+    toast({
+      title: "Success",
+      description: `Exported ${filteredCustomers.length} customers to ${format.toUpperCase()}`,
+    });
   };
 
   const filteredCustomers = customers?.filter(customer => {
@@ -108,11 +205,26 @@ export default function CustomersPage() {
                   id="phone"
                   data-testid="input-customer-phone"
                   placeholder="+1 234 567 8900"
-                  {...register("phone")}
-                  className={errors.phone ? "border-destructive" : ""}
+                  value={phoneValue}
+                  onChange={(e) => {
+                    setPhoneValue(e.target.value);
+                    setValue("phone", e.target.value);
+                  }}
+                  className={errors.phone || phoneError ? "border-destructive" : ""}
                 />
+                {isCheckingPhone && (
+                  <p className="text-sm text-muted-foreground flex items-center gap-1">
+                    <span className="animate-spin">⏳</span> Checking phone number...
+                  </p>
+                )}
                 {errors.phone && (
                   <p className="text-sm text-destructive">{errors.phone.message}</p>
+                )}
+                {!errors.phone && phoneError && (
+                  <p className="text-sm text-destructive flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {phoneError}
+                  </p>
                 )}
               </div>
 
@@ -158,7 +270,7 @@ export default function CustomersPage() {
                 <Button
                   type="submit"
                   className="flex-1"
-                  disabled={createCustomerMutation.isPending}
+                  disabled={createCustomerMutation.isPending || !!phoneError || isCheckingPhone}
                   data-testid="button-submit-customer"
                 >
                   {createCustomerMutation.isPending ? "Creating..." : "Create Customer"}
@@ -170,6 +282,7 @@ export default function CustomersPage() {
       }
     >
       <div className="p-6 max-w-7xl mx-auto space-y-6">
+        <Breadcrumb items={[{ label: "Customers" }]} />
         {/* Search */}
         <Card>
           <CardContent className="pt-6">
@@ -185,6 +298,32 @@ export default function CustomersPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Export Buttons */}
+        {filteredCustomers.length > 0 && (
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleExportCustomers(settings?.exportSettings.defaultFormat || "excel")}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Export ({settings?.exportSettings.defaultFormat?.toUpperCase() || "Excel"})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleExportCustomers(
+                settings?.exportSettings.defaultFormat === "excel" ? "pdf" : "excel"
+              )}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              {settings?.exportSettings.defaultFormat === "excel" ? "PDF" : "Excel"}
+            </Button>
+          </div>
+        )}
 
         {/* Customer List */}
         {isLoading ? (

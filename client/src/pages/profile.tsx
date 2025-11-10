@@ -2,6 +2,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/dashboard-layout";
+import { Breadcrumb } from "@/components/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -49,15 +50,19 @@ export default function ProfilePage() {
   });
 
   const onSubmit = (data: UpdateAdmin) => {
-    const updateData: UpdateAdmin = {};
+    const updateData: any = {};
+    
     if (data.name && data.name !== admin?.name) {
       updateData.name = data.name;
     }
-    if (data.password) {
-      updateData.password = data.password;
-    }
-    if (data.avatar) {
+    
+    if (data.avatar !== undefined && data.avatar !== admin?.avatar) {
       updateData.avatar = data.avatar;
+    }
+    
+    // Only include password if newPassword is provided and not empty
+    if (data.newPassword && data.newPassword.length > 0) {
+      updateData.password = data.newPassword;
     }
 
     if (Object.keys(updateData).length > 0) {
@@ -76,7 +81,8 @@ export default function ProfilePage() {
 
   return (
     <DashboardLayout title="Profile">
-      <div className="p-6 max-w-3xl mx-auto space-y-6">
+      <div className="p-6 max-w-7xl mx-auto space-y-6">
+        <Breadcrumb items={[{ label: "Profile" }]} />
         <Card>
           <CardHeader>
             <CardTitle>Profile Information</CardTitle>
@@ -133,21 +139,47 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">New Password (optional)</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  data-testid="input-profile-password"
-                  placeholder="Leave blank to keep current password"
-                  {...register("password")}
-                  className={errors.password ? "border-destructive" : ""}
-                />
-                {errors.password && (
-                  <p className="text-sm text-destructive">{errors.password.message}</p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Only fill this field if you want to change your password
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="newPassword">New Password (optional)</Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    data-testid="input-profile-new-password"
+                    placeholder="Leave blank to keep current"
+                    {...register("newPassword")}
+                    className={errors.newPassword ? "border-destructive" : ""}
+                  />
+                  {errors.newPassword && (
+                    <p className="text-sm text-destructive">{errors.newPassword.message}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Min 6 characters
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    data-testid="input-profile-confirm-password"
+                    placeholder="Confirm your new password"
+                    {...register("confirmPassword")}
+                    className={errors.confirmPassword ? "border-destructive" : ""}
+                  />
+                  {errors.confirmPassword && (
+                    <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Must match new password
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-3">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  💡 <strong>Password Change:</strong> Leave password fields blank if you don't want to change your password. Only fill them if you want to set a new password.
                 </p>
               </div>
 

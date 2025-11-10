@@ -4,6 +4,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { connectDB } from "./db";
 import bcrypt from "bcryptjs";
 import Admin from "./models/Admin";
+import { startAllSchedulers } from "./services/scheduler.service";
 
 const app = express();
 
@@ -77,6 +78,9 @@ app.use((req, res, next) => {
   }
 
   const server = await registerRoutes(app);
+
+  // Start background schedulers for auto-status rules and notifications
+  startAllSchedulers();
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
