@@ -1720,6 +1720,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== EMAIL TEST ENDPOINT (For Debugging) =====
+  app.get("/api/test/email-config", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const config = {
+        emailServiceConfigured: !!(process.env.EMAIL_USER && process.env.EMAIL_PASSWORD),
+        emailService: process.env.EMAIL_SERVICE || 'gmail',
+        emailUser: process.env.EMAIL_USER ? process.env.EMAIL_USER.substring(0, 3) + '***' : 'NOT SET',
+        emailPasswordSet: !!process.env.EMAIL_PASSWORD,
+        emailPasswordLength: process.env.EMAIL_PASSWORD ? process.env.EMAIL_PASSWORD.length : 0,
+        smtpHost: process.env.SMTP_HOST || 'NOT SET',
+        smtpPort: process.env.SMTP_PORT || 'NOT SET',
+        companyName: process.env.COMPANY_NAME || 'NOT SET',
+        nodeEnv: process.env.NODE_ENV,
+      };
+
+      res.json({
+        success: true,
+        message: 'Email configuration check',
+        config,
+        tips: [
+          'For Gmail, EMAIL_PASSWORD must be a 16-character App Password (not regular password)',
+          'Enable 2FA on Google Account first, then generate App Password',
+          'If using SMTP, set SMTP_HOST and SMTP_PORT',
+          'Check Render logs for: "✅ Email notification service initialized" or error messages',
+        ]
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
+  app.post("/api/test/send-email", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ success: false, message: 'Email address required' });
+      }
+
+      const result = await notificationService.sendCaseCreatedEmail(
+        email,
+        'Test User',
+        'Test Model',
+        'TEST-123',
+        'New Case'
+      );
+
+      res.json({
+        success: result,
+        message: result 
+          ? `✅ Test email sent to ${email}. Check your inbox!`
+          : '❌ Failed to send email. Check server logs for details.',
+      });
+    } catch (error: any) {
+      res.status(500).json({ 
+        success: false, 
+        message: error.message,
+        tip: 'Check server logs for detailed error message'
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

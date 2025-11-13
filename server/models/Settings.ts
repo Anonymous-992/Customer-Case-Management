@@ -28,7 +28,7 @@ export interface ISettings extends Document {
   };
   preferences: {
     timezone: string;
-    language: "en" | "ar" | "fr" | "hi";
+    language: "en" | "en-US" | "en-GB" | "ar" | "fr" | "he" | "es" | "de" | "it" | "pt" | "zh" | "ja" | "hi";
     dateFormat: "DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD";
   };
   userId?: mongoose.Types.ObjectId;
@@ -117,7 +117,7 @@ const settingsSchema = new Schema<ISettings>(
       },
       language: {
         type: String,
-        enum: ["en", "ar", "fr", "hi"],
+        enum: ["en", "en-US", "en-GB", "ar", "fr", "he", "es", "de", "it", "pt", "zh", "ja", "hi"],
         default: "en",
       },
       dateFormat: {

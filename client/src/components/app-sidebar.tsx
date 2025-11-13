@@ -84,8 +84,23 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <div className="px-4 py-4">
-            <h2 className="text-lg font-semibold text-sidebar-foreground">CMS</h2>
-            <p className="text-xs text-muted-foreground">Case Management</p>
+            <div className="flex items-center gap-3">
+              <img 
+                src="/logo.png" 
+                alt="Company Logo" 
+                className="h-6 sm:h-8 w-auto max-w-[100px] sm:max-w-[120px] object-contain"
+                onError={(e) => {
+                  // Fallback to text if logo fails to load
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+              <div className="hidden">
+                <h2 className="text-lg font-semibold text-sidebar-foreground">CMS</h2>
+                <p className="text-xs text-muted-foreground">Case Management</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Case Management System</p>
           </div>
           <SidebarGroupLabel>Menu</SidebarGroupLabel>
           <SidebarGroupContent>

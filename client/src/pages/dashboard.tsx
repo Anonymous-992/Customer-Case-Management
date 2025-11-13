@@ -87,7 +87,7 @@ export default function DashboardPage() {
   const [isQuickCasesExpanded, setIsQuickCasesExpanded] = useState(false);
   
   const { toast } = useToast();
-  const { settings, formatDate, formatDateTime } = useSettings();
+  const { settings, formatDate, formatDateTime, t } = useSettings();
   
   const {
     register,
@@ -746,7 +746,7 @@ export default function DashboardPage() {
 
   const stats = [
     {
-      title: "Total Customers",
+      title: t("total_customers"),
       value: customers?.length || 0,
       icon: Users,
       color: "text-blue-600",
@@ -755,7 +755,7 @@ export default function DashboardPage() {
       onClick: () => handleStatClick("Total Customers")
     },
     {
-      title: "Active Cases",
+      title: t("open_cases"),
       value: cases?.filter(c => !['Closed', 'Shipped to Customer'].includes(c.status)).length || 0,
       icon: FileText,
       color: "text-orange-600",
@@ -764,7 +764,7 @@ export default function DashboardPage() {
       onClick: () => handleStatClick("Active Cases")
     },
     {
-      title: "Ready to Ship",
+      title: t("pending_cases"),
       value: readyToShipCases,
       icon: Package,
       color: "text-green-600",
@@ -773,7 +773,7 @@ export default function DashboardPage() {
       onClick: () => handleStatClick("Ready to Ship")
     },
     {
-      title: "Completed / Total",
+      title: t("closed_cases"),
       value: `${completedCases}/${totalCases}`,
       icon: CheckCircle2,
       color: "text-purple-600",
@@ -817,7 +817,7 @@ export default function DashboardPage() {
             <DialogTrigger asChild>
               <Button variant="outline" className="border-amber-500 text-amber-700 hover:bg-amber-50 text-sm sm:text-base">
                 <Zap className="h-4 w-4 mr-1 sm:mr-2" />
-                <span className="whitespace-nowrap">Quick Case</span>
+                <span className="whitespace-nowrap">{t("quick_case")}</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
@@ -913,7 +913,7 @@ export default function DashboardPage() {
             <DialogTrigger asChild>
               <Button className="text-sm sm:text-base">
                 <Plus className="h-4 w-4 mr-1 sm:mr-2" />
-                <span className="whitespace-nowrap">Create Case</span>
+                <span className="whitespace-nowrap">{t("create_case")}</span>
               </Button>
             </DialogTrigger>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -1274,9 +1274,9 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <CardTitle className="text-amber-900 flex items-center gap-2">
-                      Quick Cases / Missing Information
+                      {t("pending_cases")} / {t("no_data")}
                       <span className="text-sm font-normal text-amber-700">
-                        ({quickCases.length} pending)
+                        ({quickCases.length} {t("pending_cases").toLowerCase()})
                       </span>
                     </CardTitle>
                     <p className="text-sm text-amber-700 mt-1">
@@ -1372,9 +1372,9 @@ export default function DashboardPage() {
               </div>
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  Open Cases by Store
+                  {t("open_cases")} {t("by_store")}
                   <span className="text-sm font-normal text-muted-foreground">
-                    ({Object.keys(openCasesByStore || {}).length} stores)
+                    ({Object.keys(openCasesByStore || {}).length} {t("store").toLowerCase()}s)
                   </span>
                 </CardTitle>
                 <p className="text-sm text-muted-foreground mt-0.5">
@@ -1546,7 +1546,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  All Cases
+                  {t("all_cases")}
                   <span className="text-sm font-normal text-muted-foreground">
                     ({sortedCases.length} total)
                   </span>

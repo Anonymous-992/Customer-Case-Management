@@ -621,8 +621,17 @@ export default function SettingsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="en">English</SelectItem>
+                      <SelectItem value="en-US">English (US)</SelectItem>
+                      <SelectItem value="en-GB">English (UK)</SelectItem>
                       <SelectItem value="ar">العربية (Arabic)</SelectItem>
                       <SelectItem value="fr">Français (French)</SelectItem>
+                      <SelectItem value="he">עברית (Hebrew)</SelectItem>
+                      <SelectItem value="es">Español (Spanish)</SelectItem>
+                      <SelectItem value="de">Deutsch (German)</SelectItem>
+                      <SelectItem value="it">Italiano (Italian)</SelectItem>
+                      <SelectItem value="pt">Português (Portuguese)</SelectItem>
+                      <SelectItem value="zh">中文 (Chinese)</SelectItem>
+                      <SelectItem value="ja">日本語 (Japanese)</SelectItem>
                       <SelectItem value="hi">हिन्दी (Hindi)</SelectItem>
                     </SelectContent>
                   </Select>

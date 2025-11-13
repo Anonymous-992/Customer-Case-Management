@@ -301,7 +301,7 @@ export const settingsSchema = z.object({
   // Preferences
   preferences: z.object({
     timezone: z.string().default("UTC"),
-    language: z.enum(["en", "ar", "fr", "hi"]).default("en"),
+    language: z.enum(["en", "en-US", "en-GB", "ar", "fr", "he", "es", "de", "it", "pt", "zh", "ja", "hi"]).default("en"),
     dateFormat: z.enum(["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]).default("DD/MM/YYYY"),
   }),
   
@@ -345,7 +345,7 @@ export const updateSettingsSchema = z.object({
   
   preferences: z.object({
     timezone: z.string().optional(),
-    language: z.enum(["en", "ar", "fr", "hi"]).optional(),
+    language: z.enum(["en", "en-US", "en-GB", "ar", "fr", "he", "es", "de", "it", "pt", "zh", "ja", "hi"]).optional(),
     dateFormat: z.enum(["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]).optional(),
   }).optional(),
 });

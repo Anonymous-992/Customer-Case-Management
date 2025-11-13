@@ -25,7 +25,7 @@ export default function CustomersPage() {
   const [phoneError, setPhoneError] = useState<string>("");
   const [isCheckingPhone, setIsCheckingPhone] = useState(false);
   const { toast } = useToast();
-  const { settings, formatDate } = useSettings();
+  const { settings, formatDate, t } = useSettings();
 
   const { data: customers, isLoading } = useQuery<Customer[]>({
     queryKey: ['/api/customers'],
@@ -174,7 +174,7 @@ export default function CustomersPage() {
           <DialogTrigger asChild>
             <Button data-testid="button-add-customer">
               <UserPlus className="h-4 w-4 mr-2" />
-              Add Customer
+              {t("add_customer")}
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">

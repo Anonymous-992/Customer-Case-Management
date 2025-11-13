@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Customer, ProductCase } from "@shared/schema";
+import { useSettings } from "@/lib/settings-context";
 
 type SearchField = 
   | "all"
@@ -31,6 +32,7 @@ export function UnifiedSearch() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchField, setSearchField] = useState<SearchField>("all");
   const [isOpen, setIsOpen] = useState(false);
+  const { t } = useSettings();
 
   // Determine which endpoints to query based on selected field
   const shouldQueryCustomers = searchField === "all" || searchField.startsWith("customer_");

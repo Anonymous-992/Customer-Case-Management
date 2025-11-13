@@ -11,12 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useSettings } from "@/lib/settings-context";
 import { Lock } from "lucide-react";
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { login } = useAuth();
   const { toast } = useToast();
+  const { t } = useSettings();
 
   const {
     register,
@@ -63,24 +65,36 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-2 text-center">
-          <div className="flex justify-center mb-2">
-            <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Lock className="h-6 w-6 text-primary" />
+          <div className="flex justify-center mb-4">
+            <div className="relative">
+              <img 
+                src="/logo.png" 
+                alt="Company Logo" 
+                className="h-12 sm:h-16 w-auto max-w-[150px] sm:max-w-[200px] object-contain"
+                onError={(e) => {
+                  // Fallback to lock icon if logo fails to load
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+              <div className="hidden h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mx-auto">
+                <Lock className="h-6 w-6 text-primary" />
+              </div>
             </div>
           </div>
-          <CardTitle className="text-2xl font-semibold">Customer Case Management</CardTitle>
+          <CardTitle className="text-2xl font-semibold">{t("customer_case_management")}</CardTitle>
           <CardDescription>
-            Sign in to access the admin dashboard
+            {t("sign_in_access")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">{t("username")}</Label>
               <Input
                 id="username"
                 data-testid="input-username"
-                placeholder="Enter your username"
+                placeholder={t("enter_username")}
                 {...register("username")}
                 className={errors.username ? "border-destructive" : ""}
               />
@@ -90,12 +104,12 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("password")}</Label>
               <Input
                 id="password"
                 type="password"
                 data-testid="input-password"
-                placeholder="Enter your password"
+                placeholder={t("enter_password")}
                 {...register("password")}
                 className={errors.password ? "border-destructive" : ""}
               />
@@ -110,7 +124,7 @@ export default function LoginPage() {
               data-testid="button-login"
               disabled={loginMutation.isPending}
             >
-              {loginMutation.isPending ? "Signing in..." : "Sign In"}
+              {loginMutation.isPending ? t("signing_in") : t("sign_in")}
             </Button>
           </form>
 
