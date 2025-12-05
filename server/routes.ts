@@ -532,33 +532,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         initialSummary,
       } = req.body;
 
-      // Check for duplicate serial number
-      const existingCase = isMongoDBAvailable
-        ? await ProductCase.findOne({ serialNumber })
-        : await memoryStorage.findCaseBySerialNumber(serialNumber);
+      // Only check for duplicate serial number if one is provided
+      if (serialNumber && serialNumber.trim() !== '') {
+        const existingCase = isMongoDBAvailable
+          ? await ProductCase.findOne({ serialNumber })
+          : await memoryStorage.findCaseBySerialNumber(serialNumber);
 
-      if (existingCase) {
-        return res.status(400).json({
-          message: `Serial number already exists for product: ${existingCase.modelNumber} (Case already registered)`
-        });
+        if (existingCase) {
+          return res.status(400).json({
+            message: `Serial number already exists for product: ${existingCase.modelNumber} (Case already registered)`
+          });
+        }
       }
 
       let productCase;
       if (isMongoDBAvailable) {
         productCase = new ProductCase({
           customerId,
-          modelNumber,
-          serialNumber,
-          purchasePlace,
-          dateOfPurchase: new Date(dateOfPurchase),
-          receiptNumber,
+          modelNumber: modelNumber || '',
+          serialNumber: serialNumber || '',
+          purchasePlace: purchasePlace || '',
+          dateOfPurchase: dateOfPurchase ? new Date(dateOfPurchase) : undefined,
+          receiptNumber: receiptNumber || '',
           status: status || 'New Case',
-          repairNeeded,
+          repairNeeded: repairNeeded || '',
           paymentStatus: paymentStatus || 'Pending',
           shippingCost: shippingCost || 0,
           shippedDate: shippedDate ? new Date(shippedDate) : undefined,
           receivedDate: receivedDate ? new Date(receivedDate) : undefined,
-          initialSummary,
+          initialSummary: initialSummary || '',
           createdBy: req.admin!._id,
         });
 
@@ -568,32 +570,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           caseId: productCase._id,
           customerId,
           type: 'case_created',
-          message: `Case created. ${initialSummary}`,
+          message: `Case created${initialSummary ? '. ' + initialSummary : ''}`,
           adminId: req.admin!._id,
           adminName: req.admin!.name,
           adminAvatar: req.admin!.avatar,
           adminRole: req.admin!.role,
           metadata: {
-            modelNumber,
-            serialNumber,
+            modelNumber: modelNumber || 'Not provided',
+            serialNumber: serialNumber || 'Not provided',
             status,
           },
         });
       } else {
         productCase = await memoryStorage.createCase({
           customerId,
-          modelNumber,
-          serialNumber,
-          purchasePlace,
-          dateOfPurchase: new Date(dateOfPurchase),
-          receiptNumber,
+          modelNumber: modelNumber || '',
+          serialNumber: serialNumber || '',
+          purchasePlace: purchasePlace || '',
+          dateOfPurchase: dateOfPurchase ? new Date(dateOfPurchase) : undefined,
+          receiptNumber: receiptNumber || '',
           status: status || 'New Case',
-          repairNeeded,
+          repairNeeded: repairNeeded || '',
           paymentStatus: paymentStatus || 'Pending',
           shippingCost: shippingCost || 0,
           shippedDate: shippedDate ? new Date(shippedDate) : undefined,
           receivedDate: receivedDate ? new Date(receivedDate) : undefined,
-          initialSummary,
+          initialSummary: initialSummary || '',
           createdBy: req.admin!._id,
         });
 
@@ -601,37 +603,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
           caseId: productCase._id,
           customerId,
           type: 'case_created',
-          message: `Case created. ${initialSummary}`,
+          message: `Case created${initialSummary ? '. ' + initialSummary : ''}`,
           adminId: req.admin!._id,
           adminName: req.admin!.name,
           adminAvatar: req.admin!.avatar,
           adminRole: req.admin!.role,
           metadata: {
-            modelNumber,
-            serialNumber,
+            modelNumber: modelNumber || 'Not provided',
+            serialNumber: serialNumber || 'Not provided',
             status,
           },
         });
       }
 
-      // Send email notification to customer about new case
-      try {
-        const customer = isMongoDBAvailable
-          ? await Customer.findById(customerId)
-          : await memoryStorage.findCustomerById(customerId);
+      // Send email notification to customer about new case (only if we have required info)
+      if (modelNumber && serialNumber) {
+        try {
+          const customer = isMongoDBAvailable
+            ? await Customer.findById(customerId)
+            : await memoryStorage.findCustomerById(customerId);
 
-        if (customer && customer.notificationPreferences?.email) {
-          await notificationService.sendCaseCreatedEmail(
-            customer.email,
-            customer.name,
-            modelNumber,
-            serialNumber,
-            status || 'New Case'
-          );
+          if (customer && customer.notificationPreferences?.email) {
+            await notificationService.sendCaseCreatedEmail(
+              customer.email,
+              customer.name,
+              modelNumber,
+              serialNumber,
+              status || 'New Case'
+            );
+          }
+        } catch (emailError) {
+          console.error('Failed to send case creation email:', emailError);
+          // Don't fail the request if email fails
         }
-      } catch (emailError) {
-        console.error('Failed to send case creation email:', emailError);
-        // Don't fail the request if email fails
       }
 
       res.status(201).json(productCase);
@@ -867,15 +871,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.body.modelNumber !== undefined) updates.modelNumber = req.body.modelNumber;
       if (req.body.serialNumber !== undefined) updates.serialNumber = req.body.serialNumber;
       if (req.body.purchasePlace !== undefined) updates.purchasePlace = req.body.purchasePlace;
-      if (req.body.dateOfPurchase !== undefined) updates.dateOfPurchase = new Date(req.body.dateOfPurchase);
+
+      // Only update dateOfPurchase if it's a valid date string (not empty)
+      if (req.body.dateOfPurchase !== undefined) {
+        if (req.body.dateOfPurchase && req.body.dateOfPurchase.trim() !== '') {
+          const date = new Date(req.body.dateOfPurchase);
+          updates.dateOfPurchase = isNaN(date.getTime()) ? null : date;
+        } else {
+          updates.dateOfPurchase = null;
+        }
+      }
+
       if (req.body.receiptNumber !== undefined) updates.receiptNumber = req.body.receiptNumber;
       if (req.body.status !== undefined) updates.status = req.body.status;
       if (req.body.paymentStatus !== undefined) updates.paymentStatus = req.body.paymentStatus;
       if (req.body.repairNeeded !== undefined) updates.repairNeeded = req.body.repairNeeded;
       if (req.body.initialSummary !== undefined) updates.initialSummary = req.body.initialSummary;
       if (req.body.shippingCost !== undefined) updates.shippingCost = req.body.shippingCost;
-      if (req.body.shippedDate !== undefined) updates.shippedDate = req.body.shippedDate ? new Date(req.body.shippedDate) : null;
-      if (req.body.receivedDate !== undefined) updates.receivedDate = req.body.receivedDate ? new Date(req.body.receivedDate) : null;
+
+      // Validate shippedDate
+      if (req.body.shippedDate !== undefined) {
+        if (req.body.shippedDate && req.body.shippedDate.trim() !== '') {
+          const date = new Date(req.body.shippedDate);
+          updates.shippedDate = isNaN(date.getTime()) ? null : date;
+        } else {
+          updates.shippedDate = null;
+        }
+      }
+
+      // Validate receivedDate
+      if (req.body.receivedDate !== undefined) {
+        if (req.body.receivedDate && req.body.receivedDate.trim() !== '') {
+          const date = new Date(req.body.receivedDate);
+          updates.receivedDate = isNaN(date.getTime()) ? null : date;
+        } else {
+          updates.receivedDate = null;
+        }
+      }
 
       const productCase = isMongoDBAvailable
         ? await ProductCase.findByIdAndUpdate(req.params.id, updates, { new: true })

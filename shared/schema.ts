@@ -79,6 +79,7 @@ export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 export const caseStatusEnum = z.enum([
   "New Case",
   "In Progress",
+  "Inspected",
   "Awaiting Parts",
   "Repair Completed",
   "Shipped to Customer",
@@ -89,7 +90,8 @@ export const paymentStatusEnum = z.enum([
   "Pending",
   "Paid by Customer",
   "Under Warranty",
-  "Company Covered"
+  "Company Covered",
+  "Cannot be repaired"
 ]);
 
 export const productCaseSchema = z.object({
@@ -113,19 +115,19 @@ export const productCaseSchema = z.object({
 });
 
 export const insertProductCaseSchema = z.object({
-  customerId: z.string(),
+  customerId: z.string().min(1, "Customer is required"),
   modelNumber: z.string().optional(),
   serialNumber: z.string().optional(),
   purchasePlace: z.string().optional(),
-  dateOfPurchase: z.string().optional(), // Will be converted to Date
+  dateOfPurchase: z.string().optional(), // Will be converted to Date, optional
   receiptNumber: z.string().optional(),
-  status: caseStatusEnum.default("New Case"),
+  status: caseStatusEnum.optional().default("New Case"),
 
-  // ✅ allow any length (even empty)
+  // All fields are optional
   repairNeeded: z.string().optional(),
   initialSummary: z.string().optional(),
 
-  paymentStatus: paymentStatusEnum.default("Pending"),
+  paymentStatus: paymentStatusEnum.optional().default("Pending"),
   shippingCost: z.number().optional().default(0),
   shippedDate: z.string().optional(),
   receivedDate: z.string().optional(),

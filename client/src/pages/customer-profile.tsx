@@ -273,6 +273,8 @@ export default function CustomerProfilePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/customers', id] });
+      // Also invalidate the customers list so it updates in real-time
+      queryClient.invalidateQueries({ queryKey: ['/api/customers'] });
       toast({
         title: "Success",
         description: "Customer information updated successfully",

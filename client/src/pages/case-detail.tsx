@@ -151,7 +151,7 @@ export default function CaseDetailPage() {
   const onSubmitEdit = async (data: any) => {
     if (!caseData) return;
 
-    // Track changes for interaction history
+    // Track changes for interaction history (excluding status and paymentStatus as backend handles those)
     const changes: string[] = [];
     const fieldLabels: Record<string, string> = {
       modelNumber: "Model Number",
@@ -159,8 +159,7 @@ export default function CaseDetailPage() {
       purchasePlace: "Purchase Place",
       dateOfPurchase: "Date of Purchase",
       receiptNumber: "Receipt Number",
-      status: "Status",
-      paymentStatus: "Payment Status",
+      // Exclude status and paymentStatus - backend handles these
       repairNeeded: "Repair Needed",
       initialSummary: "Initial Summary",
       shippingCost: "Shipping Cost",
@@ -168,61 +167,92 @@ export default function CaseDetailPage() {
       shippedDate: "Shipped Date",
     };
 
-    // Compare each field
+    // Build a minimal payload containing only fields that actually changed
+    const changedData: any = {};
+    const dateFieldsForDiff = ["dateOfPurchase", "receivedDate", "shippedDate"];
+
+    const normalizeDateValue = (value: any): string | null => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          return trimmed;
+        }
+        const d = new Date(trimmed);
+        return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
+      }
+      try {
+        const d = new Date(value);
+        return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
+      } catch {
+        return null;
+      }
+    };
+
     Object.keys(fieldLabels).forEach((field) => {
       const oldValue = caseData[field as keyof typeof caseData];
-      const newValue = data[field];
+      const newValue = data[field as keyof typeof data];
 
       // For date fields, normalize to YYYY-MM-DD format for comparison
-      if (field.includes("Date")) {
-        const oldDate = oldValue ? new Date(String(oldValue)).toISOString().split('T')[0] : null;
-        const newDate = newValue ? (newValue.includes('T') ? new Date(newValue).toISOString().split('T')[0] : newValue) : null;
+      if (dateFieldsForDiff.includes(field)) {
+        const oldDate = normalizeDateValue(oldValue);
+        const newDate = normalizeDateValue(newValue);
 
-        if (oldDate === newDate) return; // Skip if dates are the same
-        if (!oldDate && !newDate) return; // Skip if both are empty
+        // Skip if dates are the same (including both being null/undefined)
+        if (oldDate === newDate) return;
 
-        const oldDisplay = oldDate ? new Date(oldDate).toLocaleDateString() : "(empty)";
-        const newDisplay = newDate ? new Date(newDate).toLocaleDateString() : "(empty)";
-
+        const oldDisplay = oldDate ? new Date(oldDate + "T00:00:00").toLocaleDateString() : "(empty)";
+        const newDisplay = newDate ? new Date(newDate + "T00:00:00").toLocaleDateString() : "(empty)";
         changes.push(`${fieldLabels[field]} changed from "${oldDisplay}" to "${newDisplay}"`);
+
+        // For PATCH payload, send the raw new value so backend can handle empty strings as null where appropriate
+        changedData[field] = newValue;
         return;
       }
 
-      // For non-date fields
-      // Normalize empty values (treat null, undefined, empty string as same)
-      const normalizedOld = (oldValue === null || oldValue === undefined || oldValue === "") ? null : oldValue;
-      const normalizedNew = (newValue === null || newValue === undefined || newValue === "") ? null : newValue;
+      // Special handling for numeric shipping cost
+      if (field === "shippingCost") {
+        const oldNum = Number(oldValue ?? 0);
+        const newNum = Number(newValue ?? 0);
+        if (oldNum === newNum) return;
+
+        const oldDisplay = `$${oldNum.toFixed(2)}`;
+        const newDisplay = `$${newNum.toFixed(2)}`;
+        changes.push(`${fieldLabels[field]} changed from "${oldDisplay}" to "${newDisplay}"`);
+        changedData[field] = newNum;
+        return;
+      }
+
+      // For non-date, non-numeric fields
+      const normalizedOld = (oldValue === null || oldValue === undefined || oldValue === "") ? null : String(oldValue);
+      const normalizedNew = (newValue === null || newValue === undefined || newValue === "") ? null : String(newValue);
 
       // Skip if values are the same (after normalization)
       if (normalizedOld === normalizedNew) return;
 
-      // Also skip if both are effectively empty
-      if (!normalizedOld && !normalizedNew) return;
-
-      // Format the values for display
-      let oldDisplay = String(oldValue || "(empty)");
-      let newDisplay = String(newValue || "(empty)");
-
-      // Format shipping cost
-      if (field === "shippingCost") {
-        oldDisplay = `$${Number(oldValue || 0).toFixed(2)}`;
-        newDisplay = `$${Number(newValue || 0).toFixed(2)}`;
-        // Skip if amounts are the same
-        if (Number(oldValue || 0) === Number(newValue || 0)) return;
-      }
-
+      const oldDisplay = normalizedOld || "(empty)";
+      const newDisplay = normalizedNew || "(empty)";
       changes.push(`${fieldLabels[field]} changed from "${oldDisplay}" to "${newDisplay}"`);
+
+      // Include only changed fields in payload
+      changedData[field] = newValue;
     });
 
-    // First, perform the actual update to the database
-    try {
-      await updateCaseMutation.mutateAsync(data);
+    // Status and paymentStatus are logged by backend, but should still be updated only if changed
+    if (data.status !== undefined && data.status !== caseData.status) {
+      changedData.status = data.status;
+    }
+    if (data.paymentStatus !== undefined && data.paymentStatus !== caseData.paymentStatus) {
+      changedData.paymentStatus = data.paymentStatus;
+    }
 
-      // Only add changes to interaction history if there are any AND update was successful
+    try {
+      await updateCaseMutation.mutateAsync(changedData);
+
       if (changes.length > 0) {
         const changeMessage = changes.join("; ");
 
-        // Add the changes as a note in the interaction history (not awaiting to avoid blocking)
         apiRequest("POST", "/api/interactions", {
           caseId: id,
           type: "case_updated",
@@ -430,6 +460,9 @@ export default function CaseDetailPage() {
             { label: `Case: ${caseData.modelNumber}` }
           ]}
         />
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-mono text-muted-foreground">Case ID: {caseData._id}</p>
+        </div>
         {/* Case Header */}
         <Card>
           <CardContent className="pt-6">
@@ -454,7 +487,7 @@ export default function CaseDetailPage() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[2.5fr,1fr] gap-6">
           {/* Case Details */}
           <Card>
             <CardHeader>
@@ -606,7 +639,7 @@ export default function CaseDetailPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground">Date of Purchase</p>
-                      <p className="font-medium">{format(new Date(caseData.dateOfPurchase), 'MMM dd, yyyy')}</p>
+                      <p className="font-medium">{caseData.dateOfPurchase ? format(new Date(caseData.dateOfPurchase), 'MMM dd, yyyy') : 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Receipt Number</p>

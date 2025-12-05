@@ -517,14 +517,112 @@ export default function DashboardPage() {
     }
   };
 
-  const handleUpdateCase = () => {
+  const handleUpdateCase = async () => {
     if (!editingCase) return;
 
-    // Update case with new information
-    updateCaseMutation.mutate({
-      id: editingCase._id,
-      updates: editFormData,
+    // Build change log and minimal payload so we only update & log fields that actually changed
+    const changes: string[] = [];
+    const fieldLabels: Record<string, string> = {
+      serialNumber: "Serial Number",
+      purchasePlace: "Purchase Place",
+      dateOfPurchase: "Date of Purchase",
+      receiptNumber: "Receipt Number",
+      repairNeeded: "Repair Needed",
+      initialSummary: "Initial Summary",
+    };
+
+    const dateFieldsForDiff = ["dateOfPurchase"];
+    const changedData: Partial<ProductCase> = {};
+
+    const normalizeDateValue = (value: any): string | null => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          return trimmed;
+        }
+        const d = new Date(trimmed);
+        return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
+      }
+      try {
+        const d = new Date(value);
+        return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
+      } catch {
+        return null;
+      }
+    };
+
+    Object.keys(fieldLabels).forEach((field) => {
+      const oldValue = (editingCase as any)[field];
+      const newValue = (editFormData as any)[field];
+
+      // Date fields: normalise and compare by YYYY-MM-DD
+      if (dateFieldsForDiff.includes(field)) {
+        const oldDate = normalizeDateValue(oldValue);
+        const newDate = normalizeDateValue(newValue);
+
+        // Skip if dates are the same (including both being null/undefined)
+        if (oldDate === newDate) return;
+
+        const oldDisplay = oldDate ? new Date(oldDate + "T00:00:00").toLocaleDateString() : "(empty)";
+        const newDisplay = newDate ? new Date(newDate + "T00:00:00").toLocaleDateString() : "(empty)";
+        changes.push(`${fieldLabels[field]} changed from "${oldDisplay}" to "${newDisplay}"`);
+
+        // For PATCH payload, send canonical date string or empty string to clear the date
+        if (newDate === null) {
+          (changedData as any)[field] = "";
+        } else {
+          (changedData as any)[field] = newDate;
+        }
+
+        return;
+      }
+
+      // Non-date fields: treat null/undefined/"" as equivalent
+      const normalizedOld = (oldValue === null || oldValue === undefined || oldValue === "") ? null : String(oldValue);
+      const normalizedNew = (newValue === null || newValue === undefined || newValue === "") ? null : String(newValue);
+
+      // Skip if values are the same
+      if (normalizedOld === normalizedNew) return;
+
+      const oldDisplay = normalizedOld || "(empty)";
+      const newDisplay = normalizedNew || "(empty)";
+      changes.push(`${fieldLabels[field]} changed from "${oldDisplay}" to "${newDisplay}"`);
+
+      (changedData as any)[field] = newValue;
     });
+
+    // Status and paymentStatus are logged by backend as separate status_changed interactions,
+    // but we should still only send them if they actually changed.
+    if (editFormData.status && editFormData.status !== editingCase.status) {
+      changedData.status = editFormData.status;
+    }
+    if (editFormData.paymentStatus && editFormData.paymentStatus !== editingCase.paymentStatus) {
+      changedData.paymentStatus = editFormData.paymentStatus;
+    }
+
+    try {
+      await updateCaseMutation.mutateAsync({
+        id: editingCase._id,
+        updates: changedData,
+      });
+
+      // Only log interaction history if we actually changed non-status fields
+      if (changes.length > 0) {
+        const changeMessage = changes.join("; ");
+
+        apiRequest("POST", "/api/interactions", {
+          caseId: editingCase._id,
+          type: "case_updated",
+          message: changeMessage,
+        }).catch((error) => {
+          console.error("Error logging dashboard quick edit changes:", error);
+        });
+      }
+    } catch (error) {
+      console.error("Error updating case from dashboard quick edit:", error);
+    }
   };
 
   const handleCloseCreateDialog = () => {
@@ -819,13 +917,10 @@ export default function DashboardPage() {
         break;
       case "Active Cases":
         // Show only active cases (not closed, not shipped)
-        setFilterStatus("all");
-        // Clear all filters to show all active cases
-        setTimeout(() => {
-          setFilterStore("all");
-          setFilterStatus("all");
-          setFilterPayment("all");
-        }, 100);
+        setFilterStore("all");
+        setFilterPayment("all");
+        // Use special 'open' value to mean all non-closed, non-shipped cases
+        setFilterStatus("open");
         break;
       case "Ready to Ship":
         // Show only "Repair Completed" status
@@ -888,7 +983,14 @@ export default function DashboardPage() {
   // Apply filters and sort
   const filteredCases = cases?.filter(case_ => {
     if (filterStore !== "all" && case_.purchasePlace !== filterStore) return false;
-    if (filterStatus !== "all" && case_.status !== filterStatus) return false;
+    if (filterStatus !== "all") {
+      if (filterStatus === "open") {
+        // Open = any case that is not Closed or Shipped to Customer
+        if (["Closed", "Shipped to Customer"].includes(case_.status)) return false;
+      } else if (case_.status !== filterStatus) {
+        return false;
+      }
+    }
     if (filterPayment !== "all" && case_.paymentStatus !== filterPayment) return false;
     return true;
   }) || [];
@@ -1768,6 +1870,7 @@ export default function DashboardPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="open">Open (Active)</SelectItem>
                       {caseStatusEnum.options.map(status => (
                         <SelectItem key={status} value={status}>{status}</SelectItem>
                       ))}
@@ -1868,6 +1971,7 @@ export default function DashboardPage() {
                                           </span>
                                         )}
                                       </div>
+                                      <p className="text-xs text-muted-foreground truncate font-mono">ID: {case_._id}</p>
                                       {visibleColumns.serialNumber && (
                                         <p className="text-sm text-muted-foreground truncate">S/N: {case_.serialNumber}</p>
                                       )}
@@ -1941,10 +2045,11 @@ export default function DashboardPage() {
             </>
           )}
         </Card>
-      </div>
+      </div >
 
       {/* Quick Edit Dialog */}
-      <Dialog open={!!editingCase} onOpenChange={() => setEditingCase(null)}>
+      < Dialog open={!!editingCase
+      } onOpenChange={() => setEditingCase(null)}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
@@ -2155,10 +2260,10 @@ export default function DashboardPage() {
             </div>
           )}
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Quick Case Completion Dialog - Full Form with Validation */}
-      <Dialog open={isCompleteQuickCaseOpen} onOpenChange={(open) => {
+      < Dialog open={isCompleteQuickCaseOpen} onOpenChange={(open) => {
         if (!open) {
           setIsCompleteQuickCaseOpen(false);
           setSelectedQuickCase(null);
@@ -2508,10 +2613,10 @@ export default function DashboardPage() {
             </div>
           )}
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Create Customer Dialog */}
-      <Dialog open={isCreateCustomerOpen} onOpenChange={setIsCreateCustomerOpen}>
+      < Dialog open={isCreateCustomerOpen} onOpenChange={setIsCreateCustomerOpen} >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Create New Customer</DialogTitle>
@@ -2610,7 +2715,7 @@ export default function DashboardPage() {
             </div>
           </form>
         </DialogContent>
-      </Dialog>
-    </DashboardLayout>
+      </Dialog >
+    </DashboardLayout >
   );
 }
