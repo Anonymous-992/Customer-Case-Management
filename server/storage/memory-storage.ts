@@ -62,7 +62,7 @@ class MemoryStorage {
   async updateAdmin(id: string, updates: any) {
     const admin = this.admins.get(id);
     if (!admin) return null;
-    
+
     const updated = {
       ...admin,
       ...updates,
@@ -78,7 +78,7 @@ class MemoryStorage {
 
   // Customer methods
   async findAllCustomers() {
-    return Array.from(this.customers.values()).sort((a, b) => 
+    return Array.from(this.customers.values()).sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }
@@ -108,7 +108,7 @@ class MemoryStorage {
   async updateCustomer(id: string, updates: any) {
     const customer = this.customers.get(id);
     if (!customer) return null;
-    
+
     const updated = {
       ...customer,
       ...updates,
@@ -122,14 +122,14 @@ class MemoryStorage {
     // Delete all cases for this customer
     const casesToDelete = Array.from(this.cases.values()).filter(c => c.customerId === id);
     casesToDelete.forEach(c => this.cases.delete(c._id));
-    
+
     return this.customers.delete(id);
   }
 
   async searchCustomers(query: string) {
     const lowerQuery = query.toLowerCase();
     return Array.from(this.customers.values())
-      .filter(customer => 
+      .filter(customer =>
         customer.name?.toLowerCase().includes(lowerQuery) ||
         customer.phone?.toLowerCase().includes(lowerQuery) ||
         customer.email?.toLowerCase().includes(lowerQuery) ||
@@ -143,9 +143,13 @@ class MemoryStorage {
     return Array.from(this.customers.values()).find(c => c.phone === phone);
   }
 
+  async findCustomerByPhoneExcluding(phone: string, excludeId: string) {
+    return Array.from(this.customers.values()).find(c => c.phone === phone && c._id !== excludeId);
+  }
+
   // Product Case methods
   async findAllCases() {
-    return Array.from(this.cases.values()).sort((a, b) => 
+    return Array.from(this.cases.values()).sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }
@@ -175,7 +179,7 @@ class MemoryStorage {
   async updateCase(id: string, updates: any) {
     const productCase = this.cases.get(id);
     if (!productCase) return null;
-    
+
     const updated = {
       ...productCase,
       ...updates,
@@ -192,7 +196,7 @@ class MemoryStorage {
   async searchCases(query: string) {
     const lowerQuery = query.toLowerCase();
     return Array.from(this.cases.values())
-      .filter(case_ => 
+      .filter(case_ =>
         case_.modelNumber?.toLowerCase().includes(lowerQuery) ||
         case_.serialNumber?.toLowerCase().includes(lowerQuery) ||
         case_.purchasePlace?.toLowerCase().includes(lowerQuery) ||
@@ -229,7 +233,7 @@ class MemoryStorage {
 
   // Reminder methods
   async findAllReminders() {
-    return Array.from(this.reminders.values()).sort((a, b) => 
+    return Array.from(this.reminders.values()).sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }
@@ -268,7 +272,7 @@ class MemoryStorage {
   async updateReminder(id: string, updates: any) {
     const reminder = this.reminders.get(id);
     if (!reminder) return null;
-    
+
     const updated = {
       ...reminder,
       ...updates,
@@ -332,7 +336,7 @@ class MemoryStorage {
   async updateSettings(id: string, updates: any) {
     const settings = this.settings.get(id);
     if (!settings) return null;
-    
+
     const updated = {
       ...settings,
       ...updates,

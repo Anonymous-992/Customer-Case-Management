@@ -19,7 +19,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { username, password } = req.body;
 
-      const admin = isMongoDBAvailable 
+      const admin = isMongoDBAvailable
         ? await Admin.findOne({ username })
         : await memoryStorage.findAdminByUsername(username);
 
@@ -92,7 +92,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const admins = isMongoDBAvailable
         ? await Admin.find().select('-password').sort({ createdAt: -1 })
         : (await memoryStorage.findAdminsByRole()).map(a => ({ ...a, password: undefined }));
-      
+
       res.json(admins);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -192,8 +192,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingCustomer = isMongoDBAvailable
         ? await Customer.findOne({ phone })
         : await memoryStorage.findCustomerByPhone(phone);
-      
-      res.json({ 
+
+      res.json({
         exists: !!existingCustomer,
         customer: existingCustomer ? {
           name: existingCustomer.name,
@@ -208,21 +208,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/customers", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { q } = req.query;
-      
+
       let customers;
       if (q && typeof q === 'string' && q.trim().length > 0) {
         // Search mode - only if query is not empty
         const searchQuery = q.trim();
         customers = isMongoDBAvailable
           ? await Customer.find({
-              $or: [
-                { name: { $regex: searchQuery, $options: 'i' } },
-                { phone: { $regex: searchQuery, $options: 'i' } },
-                { email: { $regex: searchQuery, $options: 'i' } },
-                { customerId: { $regex: searchQuery, $options: 'i' } },
-                { address: { $regex: searchQuery, $options: 'i' } },
-              ]
-            }).sort({ createdAt: -1 })
+            $or: [
+              { name: { $regex: searchQuery, $options: 'i' } },
+              { phone: { $regex: searchQuery, $options: 'i' } },
+              { email: { $regex: searchQuery, $options: 'i' } },
+              { customerId: { $regex: searchQuery, $options: 'i' } },
+              { address: { $regex: searchQuery, $options: 'i' } },
+            ]
+          }).sort({ createdAt: -1 })
           : await memoryStorage.searchCustomers(searchQuery);
       } else {
         // Get all customers
@@ -230,7 +230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? await Customer.find().sort({ createdAt: -1 })
           : await memoryStorage.findAllCustomers();
       }
-      
+
       res.json(customers);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -270,8 +270,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : await memoryStorage.findCustomerByPhone(phone);
 
       if (existingCustomer) {
-        return res.status(400).json({ 
-          message: `Phone number already exists for customer: ${existingCustomer.name} (${existingCustomer.customerId})` 
+        return res.status(400).json({
+          message: `Phone number already exists for customer: ${existingCustomer.name} (${existingCustomer.customerId})`
         });
       }
 
@@ -326,16 +326,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+
+  app.patch("/api/customers/:id", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { name, email, address, phone } = req.body;
+
+      // If phone is being updated, check for duplicates
+      if (phone) {
+        const existingCustomer = isMongoDBAvailable
+          ? await Customer.findOne({ phone, _id: { $ne: req.params.id } })
+          : await memoryStorage.findCustomerByPhoneExcluding(phone, req.params.id);
+
+        if (existingCustomer) {
+          return res.status(400).json({
+            message: `Phone number already exists for customer: ${existingCustomer.name} (${existingCustomer.customerId})`
+          });
+        }
+      }
+
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (email !== undefined) updates.email = email;
+      if (address !== undefined) updates.address = address;
+      if (phone !== undefined) updates.phone = phone;
+
+      const customer = isMongoDBAvailable
+        ? await Customer.findByIdAndUpdate(req.params.id, updates, { new: true })
+        : await memoryStorage.updateCustomer(req.params.id, updates);
+
+      if (!customer) {
+        return res.status(404).json({ message: "Customer not found" });
+      }
+
+      res.json({ success: true, customer });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.patch("/api/customers/:id/notifications", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { notificationPreferences } = req.body;
 
       const customer = isMongoDBAvailable
         ? await Customer.findByIdAndUpdate(
-            req.params.id,
-            { notificationPreferences },
-            { new: true }
-          )
+          req.params.id,
+          { notificationPreferences },
+          { new: true }
+        )
         : await memoryStorage.updateCustomer(req.params.id, { notificationPreferences });
 
       if (!customer) {
@@ -360,7 +398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (isMongoDBAvailable) {
         await ProductCase.deleteMany({ customerId: req.params.id });
-        
+
         await InteractionHistory.create({
           customerId: req.params.id,
           type: 'customer_deleted',
@@ -400,8 +438,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingCase = isMongoDBAvailable
         ? await ProductCase.findOne({ serialNumber })
         : await memoryStorage.findCaseBySerialNumber(serialNumber);
-      
-      res.json({ 
+
+      res.json({
         exists: !!existingCase,
         case: existingCase ? {
           modelNumber: existingCase.modelNumber,
@@ -416,24 +454,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/cases", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { q } = req.query;
-      
+
       let cases;
       if (q && typeof q === 'string' && q.trim().length > 0) {
         // Search mode - only if query is not empty
         const searchQuery = q.trim();
         cases = isMongoDBAvailable
           ? await ProductCase.find({
-              $or: [
-                { modelNumber: { $regex: searchQuery, $options: 'i' } },
-                { serialNumber: { $regex: searchQuery, $options: 'i' } },
-                { purchasePlace: { $regex: searchQuery, $options: 'i' } },
-                { receiptNumber: { $regex: searchQuery, $options: 'i' } },
-                { status: { $regex: searchQuery, $options: 'i' } },
-                { paymentStatus: { $regex: searchQuery, $options: 'i' } },
-                { repairNeeded: { $regex: searchQuery, $options: 'i' } },
-                { initialSummary: { $regex: searchQuery, $options: 'i' } },
-              ]
-            }).sort({ createdAt: -1 })
+            $or: [
+              { modelNumber: { $regex: searchQuery, $options: 'i' } },
+              { serialNumber: { $regex: searchQuery, $options: 'i' } },
+              { purchasePlace: { $regex: searchQuery, $options: 'i' } },
+              { receiptNumber: { $regex: searchQuery, $options: 'i' } },
+              { status: { $regex: searchQuery, $options: 'i' } },
+              { paymentStatus: { $regex: searchQuery, $options: 'i' } },
+              { repairNeeded: { $regex: searchQuery, $options: 'i' } },
+              { initialSummary: { $regex: searchQuery, $options: 'i' } },
+            ]
+          }).sort({ createdAt: -1 })
           : await memoryStorage.searchCases(searchQuery);
       } else {
         // Get all cases
@@ -441,7 +479,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? await ProductCase.find().sort({ createdAt: -1 })
           : await memoryStorage.findAllCases();
       }
-      
+
       res.json(cases);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -500,8 +538,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : await memoryStorage.findCaseBySerialNumber(serialNumber);
 
       if (existingCase) {
-        return res.status(400).json({ 
-          message: `Serial number already exists for product: ${existingCase.modelNumber} (Case already registered)` 
+        return res.status(400).json({
+          message: `Serial number already exists for product: ${existingCase.modelNumber} (Case already registered)`
         });
       }
 
@@ -643,8 +681,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : await memoryStorage.findCaseBySerialNumber(serialNumber);
 
         if (existingCase) {
-          return res.status(400).json({ 
-            message: `Serial number already exists for product: ${existingCase.modelNumber}` 
+          return res.status(400).json({
+            message: `Serial number already exists for product: ${existingCase.modelNumber}`
           });
         }
       }
@@ -726,7 +764,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/cases/:id/complete", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { customerInfo, caseInfo } = req.body;
-      
+
       // Get the case
       const productCase = isMongoDBAvailable
         ? await ProductCase.findById(req.params.id)
@@ -821,18 +859,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const oldStatus = existingCase.status;
+      const oldPaymentStatus = existingCase.paymentStatus;
+
+      // Build updates object with ALL possible fields
       const updates: any = {};
-      
-      if (req.body.status) updates.status = req.body.status;
-      if (req.body.paymentStatus) updates.paymentStatus = req.body.paymentStatus;
+
+      if (req.body.modelNumber !== undefined) updates.modelNumber = req.body.modelNumber;
+      if (req.body.serialNumber !== undefined) updates.serialNumber = req.body.serialNumber;
+      if (req.body.purchasePlace !== undefined) updates.purchasePlace = req.body.purchasePlace;
+      if (req.body.dateOfPurchase !== undefined) updates.dateOfPurchase = new Date(req.body.dateOfPurchase);
+      if (req.body.receiptNumber !== undefined) updates.receiptNumber = req.body.receiptNumber;
+      if (req.body.status !== undefined) updates.status = req.body.status;
+      if (req.body.paymentStatus !== undefined) updates.paymentStatus = req.body.paymentStatus;
+      if (req.body.repairNeeded !== undefined) updates.repairNeeded = req.body.repairNeeded;
+      if (req.body.initialSummary !== undefined) updates.initialSummary = req.body.initialSummary;
       if (req.body.shippingCost !== undefined) updates.shippingCost = req.body.shippingCost;
-      if (req.body.shippedDate) updates.shippedDate = new Date(req.body.shippedDate);
-      if (req.body.receivedDate) updates.receivedDate = new Date(req.body.receivedDate);
+      if (req.body.shippedDate !== undefined) updates.shippedDate = req.body.shippedDate ? new Date(req.body.shippedDate) : null;
+      if (req.body.receivedDate !== undefined) updates.receivedDate = req.body.receivedDate ? new Date(req.body.receivedDate) : null;
 
       const productCase = isMongoDBAvailable
         ? await ProductCase.findByIdAndUpdate(req.params.id, updates, { new: true })
         : await memoryStorage.updateCase(req.params.id, updates);
 
+      // Only create interaction for status change (detailed changes are logged by frontend)
       if (req.body.status && req.body.status !== oldStatus) {
         const interactionData = {
           caseId: req.params.id,
@@ -868,19 +917,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
               oldStatus,
               req.body.status
             );
-            
+
             console.log('Notification results:', notificationResults);
           }
         } catch (notificationError: any) {
           console.error('Failed to send notification:', notificationError.message);
           // Don't fail the request if notification fails
         }
-      } else {
+      }
+
+      // Send notification for payment status change (if applicable)
+      if (req.body.paymentStatus && req.body.paymentStatus !== oldPaymentStatus) {
         const interactionData = {
           caseId: req.params.id,
           customerId: existingCase.customerId,
-          type: 'case_updated' as const,
-          message: `Case information updated`,
+          type: 'payment_updated' as const,
+          message: `Payment status changed from "${oldPaymentStatus}" to "${req.body.paymentStatus}"`,
           adminId: req.admin!._id,
           adminName: req.admin!.name,
           adminAvatar: req.admin!.avatar,
@@ -893,6 +945,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await memoryStorage.createInteraction(interactionData);
         }
       }
+
+      // Note: Removed generic "Case information updated" log 
+      // Frontend now logs detailed field-by-field changes
 
       res.json(productCase);
     } catch (error: any) {
@@ -1004,7 +1059,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/quick-cases/:id/complete", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { customerInfo, caseInfo } = req.body;
-      
+
       // Get the Quick Case
       const quickCase = isMongoDBAvailable
         ? await QuickCase.findById(req.params.id)
@@ -1057,8 +1112,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : await memoryStorage.findCaseBySerialNumber(caseInfo.serialNumber);
 
         if (existingCase) {
-          return res.status(400).json({ 
-            message: `Serial number already exists for product: ${existingCase.modelNumber}` 
+          return res.status(400).json({
+            message: `Serial number already exists for product: ${existingCase.modelNumber}`
           });
         }
       }
@@ -1217,7 +1272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Total counts
       const totalCases = cases.length;
       const totalCustomers = customers.length;
-      const openCases = cases.filter(c => 
+      const openCases = cases.filter(c =>
         c.status !== 'Closed' && c.status !== 'Shipped to Customer'
       ).length;
       const closedCases = cases.filter(c => c.status === 'Closed').length;
@@ -1285,12 +1340,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const date = new Date(now);
         date.setDate(date.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
-        
+
         const count = cases.filter(c => {
           const caseDate = new Date(c.createdAt).toISOString().split('T')[0];
           return caseDate === dateStr;
         }).length;
-        
+
         last30Days.push({ date: dateStr, count });
       }
 
@@ -1344,12 +1399,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== REMINDER ROUTES =====
-  
+
   // Get all reminders for current admin (assigned to them or created by them)
   app.get("/api/reminders", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const adminId = req.admin!._id.toString();
-      
+
       let reminders;
       if (isMongoDBAvailable) {
         reminders = await Reminder.find({
@@ -1360,7 +1415,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }).sort({ createdAt: -1 });
       } else {
         const allReminders = await memoryStorage.findAllReminders();
-        reminders = allReminders.filter((r: any) => 
+        reminders = allReminders.filter((r: any) =>
           r.assignedTo.includes(adminId) || r.assignedBy === adminId
         );
       }
@@ -1375,36 +1430,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/reminders/unread-count", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const adminId = req.admin!._id.toString();
-      
+
       let count = 0;
-      
+
       if (isMongoDBAvailable) {
         // Count reminders assigned to this admin that they haven't read
         const unreadAssigned = await Reminder.countDocuments({
           assignedTo: adminId,
           isReadByAssignees: { $ne: adminId }
         });
-        
+
         // Count reminders created by this admin with unread updates from assignees
         const unreadUpdates = await Reminder.countDocuments({
           assignedBy: adminId,
           hasUnreadUpdate: true
         });
-        
+
         count = unreadAssigned + unreadUpdates;
       } else {
         const allReminders = await memoryStorage.findAllReminders();
-        
+
         // Count unread assigned reminders
-        const unreadAssigned = allReminders.filter((r: any) => 
+        const unreadAssigned = allReminders.filter((r: any) =>
           r.assignedTo.includes(adminId) && !(r.isReadByAssignees || []).includes(adminId)
         ).length;
-        
+
         // Count reminders with updates for creator
         const unreadUpdates = allReminders.filter((r: any) =>
           r.assignedBy === adminId && r.hasUnreadUpdate === true
         ).length;
-        
+
         count = unreadAssigned + unreadUpdates;
       }
 
@@ -1426,7 +1481,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const admin = isMongoDBAvailable
           ? await Admin.findById(adminId)
           : await memoryStorage.findAdminById(adminId);
-        
+
         if (admin) {
           assignedToNames.push(admin.name);
         }
@@ -1514,7 +1569,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (reminder) {
             const isAssignee = reminder.assignedTo.some(id => id.toString() === currentAdmin._id.toString());
             const isCreator = reminder.assignedBy.toString() === currentAdmin._id.toString();
-            
+
             // If a Sub Admin assignee is updating (not the creator), mark as unread update for Super Admin
             if (isAssignee && !isCreator) {
               updates.hasUnreadUpdate = true;
@@ -1526,7 +1581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (reminder) {
             const isAssignee = reminder.assignedTo.includes(currentAdmin._id.toString());
             const isCreator = reminder.assignedBy === currentAdmin._id.toString();
-            
+
             if (isAssignee && !isCreator) {
               updates.hasUnreadUpdate = true;
               updates.lastUpdatedBy = currentAdmin._id.toString();
@@ -1578,24 +1633,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== SETTINGS ROUTES =====
-  
+
   // Get settings for current user (or global if superadmin)
   app.get("/api/settings", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const currentAdmin = req.admin!;
       const userId = currentAdmin.role === "superadmin" ? undefined : currentAdmin._id.toString();
-      
+
       let settings;
       if (isMongoDBAvailable) {
         settings = await Settings.findOne({ userId: userId || { $exists: false } });
-        
+
         // Create default settings if none exist
         if (!settings) {
           settings = await Settings.create({ userId });
         }
       } else {
         settings = await memoryStorage.findSettings(userId);
-        
+
         // Create default settings if none exist
         if (!settings) {
           settings = await memoryStorage.createSettings({ userId });
@@ -1614,11 +1669,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const currentAdmin = req.admin!;
       const updates = req.body;
       const userId = currentAdmin.role === "superadmin" ? undefined : currentAdmin._id.toString();
-      
+
       let settings;
       if (isMongoDBAvailable) {
         settings = await Settings.findOne({ userId: userId || { $exists: false } });
-        
+
         if (!settings) {
           // Create new settings with updates
           settings = await Settings.create({ userId, ...updates });
@@ -1642,12 +1697,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (updates.preferences) {
             settings.preferences = { ...settings.preferences, ...updates.preferences };
           }
-          
+
           await settings.save();
         }
       } else {
         settings = await memoryStorage.findSettings(userId);
-        
+
         if (!settings) {
           settings = await memoryStorage.createSettings({ userId, ...updates });
         } else {
@@ -1666,7 +1721,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const currentAdmin = req.admin!;
       const userId = currentAdmin.role === "superadmin" ? undefined : currentAdmin._id.toString();
-      
+
       const defaultSettings = {
         notifications: {
           emailEnabled: true,
@@ -1697,7 +1752,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           dateFormat: "DD/MM/YYYY",
         },
       };
-      
+
       let settings;
       if (isMongoDBAvailable) {
         settings = await Settings.findOneAndUpdate(
@@ -1754,7 +1809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/test/send-email", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { email } = req.body;
-      
+
       if (!email) {
         return res.status(400).json({ success: false, message: 'Email address required' });
       }
@@ -1769,13 +1824,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: result,
-        message: result 
+        message: result
           ? `✅ Test email sent to ${email}. Check your inbox!`
           : '❌ Failed to send email. Check server logs for details.',
       });
     } catch (error: any) {
-      res.status(500).json({ 
-        success: false, 
+      res.status(500).json({
+        success: false,
         message: error.message,
         tip: 'Check server logs for detailed error message'
       });

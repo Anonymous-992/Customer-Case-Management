@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { insertProductCaseSchema, type InsertProductCase, type CustomerWithCases, caseStatusEnum, paymentStatusEnum } from "@shared/schema";
 import { useAuth } from "@/lib/auth-context";
-import { Plus, Mail, Phone, MapPin, Trash2, Calendar, DollarSign, AlertCircle, Bell, BellOff } from "lucide-react";
+import { Plus, Mail, Phone, MapPin, Trash2, Calendar, DollarSign, AlertCircle, Bell, BellOff, Edit2, Clock } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import confetti from "canvas-confetti";
 import {
@@ -43,6 +43,11 @@ export default function CustomerProfilePage() {
   const [isCheckingSerial, setIsCheckingSerial] = useState(false);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
+  const [isEditingCustomer, setIsEditingCustomer] = useState(false);
+  const [editCustomerData, setEditCustomerData] = useState({ name: "", email: "", address: "", phone: "" });
+  const [editPhoneValue, setEditPhoneValue] = useState("");
+  const [editPhoneError, setEditPhoneError] = useState<string>("");
+  const [isCheckingEditPhone, setIsCheckingEditPhone] = useState(false);
   const { toast } = useToast();
 
   const { data: customer, isLoading } = useQuery<CustomerWithCases>({
@@ -83,7 +88,7 @@ export default function CustomerProfilePage() {
           },
         });
         const data = await response.json();
-        
+
         if (data.exists) {
           setSerialError(`Serial number already exists for product: ${data.case.modelNumber}`);
         } else {
@@ -99,6 +104,44 @@ export default function CustomerProfilePage() {
     const timer = setTimeout(checkSerial, 500); // Debounce 500ms
     return () => clearTimeout(timer);
   }, [serialValue]);
+
+  // Phone validation for customer edit
+  useEffect(() => {
+    const checkPhone = async () => {
+      if (!isEditingCustomer || editPhoneValue === customer?.phone) {
+        setEditPhoneError("");
+        return;
+      }
+
+      if (editPhoneValue.length < 10) {
+        setEditPhoneError("");
+        return;
+      }
+
+      setIsCheckingEditPhone(true);
+      try {
+        const response = await fetch(`/api/customers/check-phone/${encodeURIComponent(editPhoneValue)}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+        });
+        const data = await response.json();
+
+        if (data.exists) {
+          setEditPhoneError(`Phone already exists for customer: ${data.customer.name} (${data.customer.customerId})`);
+        } else {
+          setEditPhoneError("");
+        }
+      } catch (error) {
+        console.error('Error checking phone:', error);
+      } finally {
+        setIsCheckingEditPhone(false);
+      }
+    };
+
+    const timer = setTimeout(checkPhone, 500);
+    return () => clearTimeout(timer);
+  }, [editPhoneValue, isEditingCustomer, customer?.phone]);
 
   // Sync notification preferences with customer data
   useEffect(() => {
@@ -128,14 +171,14 @@ export default function CustomerProfilePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/customers', id] });
-      
+
       // Trigger confetti celebration
       confetti({
         particleCount: 100,
         spread: 70,
         origin: { y: 0.6 }
       });
-      
+
       setTimeout(() => {
         confetti({
           particleCount: 50,
@@ -144,7 +187,7 @@ export default function CustomerProfilePage() {
           origin: { x: 0 }
         });
       }, 250);
-      
+
       setTimeout(() => {
         confetti({
           particleCount: 50,
@@ -153,13 +196,13 @@ export default function CustomerProfilePage() {
           origin: { x: 1 }
         });
       }, 400);
-      
+
       toast({
         title: "🎉 Success!",
         description: "Product case created successfully!",
         className: "bg-green-50 border-green-200"
       });
-      
+
       setIsDialogOpen(false);
       reset({
         customerId: id,
@@ -199,30 +242,51 @@ export default function CustomerProfilePage() {
     },
   });
 
-const deleteCustomerMutation = useMutation({
-  mutationFn: async (customerId: string) => {
-    return await apiRequest("DELETE", `/api/customers/${customerId}`);
-  },
-  onSuccess: () => {
-    // Refresh customer list when redirected back
-    queryClient.invalidateQueries({ queryKey: ['/api/customers'] });
+  const deleteCustomerMutation = useMutation({
+    mutationFn: async (customerId: string) => {
+      return await apiRequest("DELETE", `/api/customers/${customerId}`);
+    },
+    onSuccess: () => {
+      // Refresh customer list when redirected back
+      queryClient.invalidateQueries({ queryKey: ['/api/customers'] });
 
-    toast({
-      title: "Success",
-      description: "Customer deleted successfully",
-    });
+      toast({
+        title: "Success",
+        description: "Customer deleted successfully",
+      });
 
-    // Redirect to main customer page
-    setLocation("/customers");
-  },
-  onError: (error: Error) => {
-    toast({
-      title: "Error",
-      description: error.message,
-      variant: "destructive",
-    });
-  },
-});
+      // Redirect to main customer page
+      setLocation("/customers");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateCustomerMutation = useMutation({
+    mutationFn: async (data: { name?: string; email?: string; address?: string }) => {
+      return await apiRequest("PATCH", `/api/customers/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/customers', id] });
+      toast({
+        title: "Success",
+        description: "Customer information updated successfully",
+      });
+      setIsEditingCustomer(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
 
 
@@ -268,282 +332,327 @@ const deleteCustomerMutation = useMutation({
       title={customer.name}
       actions={
         <div className="flex flex-col sm:flex-row gap-2 w-full">
-  <Button
-    variant="outline"
-    onClick={() => setDeleteCustomerId(customer._id)}
-    data-testid="button-delete-customer"
-    className="w-full sm:w-auto"
-  >
-    <Trash2 className="h-4 w-4 mr-2" />
-    Delete Customer
-  </Button>
-
-  <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-    <DialogTrigger asChild>
-      <Button data-testid="button-add-case" className="w-full sm:w-auto">
-        <Plus className="h-4 w-4 mr-2" />
-        Add Product Case
-      </Button>
-    </DialogTrigger>
-    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-      <DialogHeader>
-        <DialogTitle>Register New Product Case</DialogTitle>
-        <DialogDescription>
-          Add a new product case for {customer.name}
-        </DialogDescription>
-      </DialogHeader>
-
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="modelNumber">Model Number</Label>
-            <Input
-              id="modelNumber"
-              data-testid="input-model-number"
-              {...register("modelNumber")}
-              className={errors.modelNumber ? "border-destructive" : ""}
-            />
-            {errors.modelNumber && (
-              <p className="text-sm text-destructive">
-                {errors.modelNumber.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="serialNumber">Serial Number</Label>
-            <Input
-              id="serialNumber"
-              data-testid="input-serial-number"
-              value={serialValue}
-              onChange={(e) => {
-                setSerialValue(e.target.value);
-                setValue("serialNumber", e.target.value);
-              }}
-              className={errors.serialNumber || serialError ? "border-destructive" : ""}
-            />
-            {isCheckingSerial && (
-              <p className="text-sm text-muted-foreground flex items-center gap-1">
-                <span className="animate-spin">⏳</span> Checking serial number...
-              </p>
-            )}
-            {errors.serialNumber && (
-              <p className="text-sm text-destructive">
-                {errors.serialNumber.message}
-              </p>
-            )}
-            {!errors.serialNumber && serialError && (
-              <p className="text-sm text-destructive flex items-center gap-1">
-                <AlertCircle className="h-3 w-3" />
-                {serialError}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="purchasePlace">Purchase Place</Label>
-            <Input
-              id="purchasePlace"
-              data-testid="input-purchase-place"
-              {...register("purchasePlace")}
-              className={errors.purchasePlace ? "border-destructive" : ""}
-            />
-            {errors.purchasePlace && (
-              <p className="text-sm text-destructive">
-                {errors.purchasePlace.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="dateOfPurchase">Date of Purchase</Label>
-            <Input
-              id="dateOfPurchase"
-              type="date"
-              data-testid="input-date-of-purchase"
-              {...register("dateOfPurchase")}
-              className={errors.dateOfPurchase ? "border-destructive" : ""}
-            />
-            {errors.dateOfPurchase && (
-              <p className="text-sm text-destructive">
-                {errors.dateOfPurchase.message}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="receiptNumber">Receipt Number</Label>
-          <Input
-            id="receiptNumber"
-            data-testid="input-receipt-number"
-            {...register("receiptNumber")}
-            className={errors.receiptNumber ? "border-destructive" : ""}
-          />
-          {errors.receiptNumber && (
-            <p className="text-sm text-destructive">
-              {errors.receiptNumber.message}
-            </p>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="status">Status</Label>
-            <Select
-              value={watch("status")}
-              onValueChange={(value) => setValue("status", value as any)}
-            >
-              <SelectTrigger data-testid="select-status">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {caseStatusEnum.options.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="paymentStatus">Payment Status</Label>
-            <Select
-              value={watch("paymentStatus")}
-              onValueChange={(value) =>
-                setValue("paymentStatus", value as any)
-              }
-            >
-              <SelectTrigger data-testid="select-payment-status">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {paymentStatusEnum.options.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="repairNeeded">Repair Needed</Label>
-          <Textarea
-            id="repairNeeded"
-            data-testid="input-repair-needed"
-            rows={3}
-            {...register("repairNeeded")}
-            className={errors.repairNeeded ? "border-destructive" : ""}
-          />
-          {errors.repairNeeded && (
-            <p className="text-sm text-destructive">
-              {errors.repairNeeded.message}
-            </p>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="shippingCost">Shipping Cost ($)</Label>
-            <Input
-              id="shippingCost"
-              type="number"
-              step="0.01"
-              data-testid="input-shipping-cost"
-              {...register("shippingCost", { valueAsNumber: true })}
-              className={errors.shippingCost ? "border-destructive" : ""}
-            />
-            {errors.shippingCost && (
-              <p className="text-sm text-destructive">
-                {errors.shippingCost.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="receivedDate">Received Date</Label>
-            <Input
-              id="receivedDate"
-              type="date"
-              data-testid="input-received-date"
-              {...register("receivedDate")}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="shippedDate">Shipped Date</Label>
-            <Input
-              id="shippedDate"
-              type="date"
-              data-testid="input-shipped-date"
-              {...register("shippedDate")}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="initialSummary">Initial Summary</Label>
-          <Textarea
-            id="initialSummary"
-            data-testid="input-initial-summary"
-            rows={4}
-            placeholder="Why are we opening this case?"
-            {...register("initialSummary")}
-            className={errors.initialSummary ? "border-destructive" : ""}
-          />
-          {errors.initialSummary && (
-            <p className="text-sm text-destructive">
-              {errors.initialSummary.message}
-            </p>
-          )}
-        </div>
-
-        <div className="flex gap-2 pt-4">
           <Button
-            type="button"
             variant="outline"
-            onClick={() => setIsDialogOpen(false)}
-            className="flex-1"
+            onClick={() => {
+              if (isEditingCustomer) {
+                // Check for phone error before saving
+                if (editPhoneError) {
+                  toast({
+                    title: "Error",
+                    description: editPhoneError,
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                // Save changes
+                updateCustomerMutation.mutate(editCustomerData);
+              } else {
+                // Enter edit mode
+                setIsEditingCustomer(true);
+                setEditCustomerData({
+                  name: customer.name,
+                  email: customer.email,
+                  address: customer.address,
+                  phone: customer.phone,
+                });
+                setEditPhoneValue(customer.phone);
+                setEditPhoneError("");
+              }
+            }}
+            className="w-full sm:w-auto"
+            disabled={updateCustomerMutation.isPending || !!editPhoneError || isCheckingEditPhone}
           >
-            Cancel
+            <Edit2 className="h-4 w-4 mr-2" />
+            {isEditingCustomer ? (updateCustomerMutation.isPending ? "Saving..." : "Save Changes") : "Edit Info"}
           </Button>
+
+          {isEditingCustomer && (
+            <Button
+              variant="outline"
+              onClick={() => setIsEditingCustomer(false)}
+              className="w-full sm:w-auto"
+            >
+              Cancel
+            </Button>
+          )}
+
           <Button
-            type="submit"
-            className="flex-1"
-            disabled={createCaseMutation.isPending || !!serialError || isCheckingSerial}
-            data-testid="button-submit-case"
+            variant="outline"
+            onClick={() => setDeleteCustomerId(customer._id)}
+            data-testid="button-delete-customer"
+            className="w-full sm:w-auto"
           >
-            {createCaseMutation.isPending ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span>Creating Case...</span>
-              </div>
-            ) : (
-              <>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Case
-              </>
-            )}
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete Customer
           </Button>
+
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-case" className="w-full sm:w-auto">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Product Case
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Register New Product Case</DialogTitle>
+                <DialogDescription>
+                  Add a new product case for {customer.name}
+                </DialogDescription>
+              </DialogHeader>
+
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="modelNumber">Model Number</Label>
+                    <Input
+                      id="modelNumber"
+                      data-testid="input-model-number"
+                      {...register("modelNumber")}
+                      className={errors.modelNumber ? "border-destructive" : ""}
+                    />
+                    {errors.modelNumber && (
+                      <p className="text-sm text-destructive">
+                        {errors.modelNumber.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="serialNumber">Serial Number</Label>
+                    <Input
+                      id="serialNumber"
+                      data-testid="input-serial-number"
+                      value={serialValue}
+                      onChange={(e) => {
+                        setSerialValue(e.target.value);
+                        setValue("serialNumber", e.target.value);
+                      }}
+                      className={errors.serialNumber || serialError ? "border-destructive" : ""}
+                    />
+                    {isCheckingSerial && (
+                      <p className="text-sm text-muted-foreground flex items-center gap-1">
+                        <span className="animate-spin">⏳</span> Checking serial number...
+                      </p>
+                    )}
+                    {errors.serialNumber && (
+                      <p className="text-sm text-destructive">
+                        {errors.serialNumber.message}
+                      </p>
+                    )}
+                    {!errors.serialNumber && serialError && (
+                      <p className="text-sm text-destructive flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {serialError}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="purchasePlace">Purchase Place</Label>
+                    <Input
+                      id="purchasePlace"
+                      data-testid="input-purchase-place"
+                      {...register("purchasePlace")}
+                      className={errors.purchasePlace ? "border-destructive" : ""}
+                    />
+                    {errors.purchasePlace && (
+                      <p className="text-sm text-destructive">
+                        {errors.purchasePlace.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="dateOfPurchase">Date of Purchase</Label>
+                    <Input
+                      id="dateOfPurchase"
+                      type="date"
+                      data-testid="input-date-of-purchase"
+                      {...register("dateOfPurchase")}
+                      className={errors.dateOfPurchase ? "border-destructive" : ""}
+                    />
+                    {errors.dateOfPurchase && (
+                      <p className="text-sm text-destructive">
+                        {errors.dateOfPurchase.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="receiptNumber">Receipt Number</Label>
+                  <Input
+                    id="receiptNumber"
+                    data-testid="input-receipt-number"
+                    {...register("receiptNumber")}
+                    className={errors.receiptNumber ? "border-destructive" : ""}
+                  />
+                  {errors.receiptNumber && (
+                    <p className="text-sm text-destructive">
+                      {errors.receiptNumber.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={watch("status")}
+                      onValueChange={(value) => setValue("status", value as any)}
+                    >
+                      <SelectTrigger data-testid="select-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {caseStatusEnum.options.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="paymentStatus">Payment Status</Label>
+                    <Select
+                      value={watch("paymentStatus")}
+                      onValueChange={(value) =>
+                        setValue("paymentStatus", value as any)
+                      }
+                    >
+                      <SelectTrigger data-testid="select-payment-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {paymentStatusEnum.options.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="repairNeeded">Repair Needed</Label>
+                  <Textarea
+                    id="repairNeeded"
+                    data-testid="input-repair-needed"
+                    rows={3}
+                    {...register("repairNeeded")}
+                    className={errors.repairNeeded ? "border-destructive" : ""}
+                  />
+                  {errors.repairNeeded && (
+                    <p className="text-sm text-destructive">
+                      {errors.repairNeeded.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="shippingCost">Shipping Cost ($)</Label>
+                    <Input
+                      id="shippingCost"
+                      type="number"
+                      step="0.01"
+                      data-testid="input-shipping-cost"
+                      {...register("shippingCost", { valueAsNumber: true })}
+                      className={errors.shippingCost ? "border-destructive" : ""}
+                    />
+                    {errors.shippingCost && (
+                      <p className="text-sm text-destructive">
+                        {errors.shippingCost.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="receivedDate">Received Date</Label>
+                    <Input
+                      id="receivedDate"
+                      type="date"
+                      data-testid="input-received-date"
+                      {...register("receivedDate")}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="shippedDate">Shipped Date</Label>
+                    <Input
+                      id="shippedDate"
+                      type="date"
+                      data-testid="input-shipped-date"
+                      {...register("shippedDate")}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="initialSummary">Initial Summary</Label>
+                  <Textarea
+                    id="initialSummary"
+                    data-testid="input-initial-summary"
+                    rows={4}
+                    placeholder="Why are we opening this case?"
+                    {...register("initialSummary")}
+                    className={errors.initialSummary ? "border-destructive" : ""}
+                  />
+                  {errors.initialSummary && (
+                    <p className="text-sm text-destructive">
+                      {errors.initialSummary.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-2 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsDialogOpen(false)}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="flex-1"
+                    disabled={createCaseMutation.isPending || !!serialError || isCheckingSerial}
+                    data-testid="button-submit-case"
+                  >
+                    {createCaseMutation.isPending ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Creating Case...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create Case
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
-      </form>
-    </DialogContent>
-  </Dialog>
-</div>
 
       }
     >
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        <Breadcrumb 
+        <Breadcrumb
           items={[
             { label: "Customers", href: "/customers" },
             { label: customer.name }
-          ]} 
+          ]}
         />
         <div className="flex flex-col gap-2">
           <p className="text-sm font-mono text-muted-foreground">{customer.customerId}</p>
@@ -563,27 +672,92 @@ const deleteCustomerMutation = useMutation({
                 <CardTitle>Customer Information</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <Mail className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Email</p>
-                    <p className="font-medium">{customer.email}</p>
+                {isEditingCustomer ? (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-customer-name">Customer Name</Label>
+                      <Input
+                        id="edit-customer-name"
+                        value={editCustomerData.name}
+                        onChange={(e) => setEditCustomerData({ ...editCustomerData, name: e.target.value })}
+                        placeholder="Full name"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-customer-email">Email Address</Label>
+                      <Input
+                        id="edit-customer-email"
+                        type="email"
+                        value={editCustomerData.email}
+                        onChange={(e) => setEditCustomerData({ ...editCustomerData, email: e.target.value })}
+                        placeholder="email@example.com"
+                      />
+                    </div>
+
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-customer-phone">Phone Number</Label>
+                      <Input
+                        id="edit-customer-phone"
+                        value={editPhoneValue}
+                        onChange={(e) => {
+                          setEditPhoneValue(e.target.value);
+                          setEditCustomerData({ ...editCustomerData, phone: e.target.value });
+                        }}
+                        placeholder="+1 234 567 8900"
+                        className={editPhoneError ? "border-destructive" : ""}
+                      />
+                      {isCheckingEditPhone && (
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3 animate-spin" />
+                          Checking phone number...
+                        </p>
+                      )}
+                      {editPhoneError && (
+                        <p className="text-sm text-destructive flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {editPhoneError}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-customer-address">Address</Label>
+                      <Textarea
+                        id="edit-customer-address"
+                        value={editCustomerData.address}
+                        onChange={(e) => setEditCustomerData({ ...editCustomerData, address: e.target.value })}
+                        placeholder="Full address"
+                        rows={3}
+                      />
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Phone className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Phone</p>
-                    <p className="font-medium">{customer.phone}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <MapPin className="h-5 w-5 text-muted-foreground mt-1" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Address</p>
-                    <p className="font-medium">{customer.address}</p>
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <Mail className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex-1">
+                        <p className="text-sm text-muted-foreground">Email</p>
+                        <p className="font-medium">{customer.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Phone className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex-1">
+                        <p className="text-sm text-muted-foreground">Phone</p>
+                        <p className="font-medium">{customer.phone}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <MapPin className="h-5 w-5 text-muted-foreground mt-1" />
+                      <div className="flex-1">
+                        <p className="text-sm text-muted-foreground">Address</p>
+                        <p className="font-medium">{customer.address}</p>
+                      </div>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -681,14 +855,13 @@ const deleteCustomerMutation = useMutation({
                             <p className="font-semibold font-mono truncate">{case_.modelNumber}</p>
                             <p className="text-sm text-muted-foreground font-mono">S/N: {case_.serialNumber}</p>
                           </div>
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                            case_.status === 'New Case' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${case_.status === 'New Case' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
                             case_.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300' :
-                            case_.status === 'Awaiting Parts' ? 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300' :
-                            case_.status === 'Repair Completed' ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' :
-                            case_.status === 'Shipped to Customer' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
-                            'bg-gray-100 text-gray-800 dark:bg-gray-950 dark:text-gray-300'
-                          }`}>
+                              case_.status === 'Awaiting Parts' ? 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300' :
+                                case_.status === 'Repair Completed' ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' :
+                                  case_.status === 'Shipped to Customer' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
+                                    'bg-gray-100 text-gray-800 dark:bg-gray-950 dark:text-gray-300'
+                            }`}>
                             {case_.status}
                           </span>
                         </div>

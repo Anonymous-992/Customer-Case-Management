@@ -66,9 +66,9 @@ export const customerSchema = z.object({
 });
 
 export const insertCustomerSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  phone: z.string().min(10, "Phone number must be at least 10 characters"),
-  address: z.string().min(5, "Address must be at least 5 characters"),
+  name: z.string().optional(),
+  phone: z.string().optional(),
+  address: z.string().optional(),
   email: z.string().email("Invalid email address"),
 });
 
@@ -114,9 +114,9 @@ export const productCaseSchema = z.object({
 
 export const insertProductCaseSchema = z.object({
   customerId: z.string(),
-  modelNumber: z.string().min(1, "Model number is required"),
-  serialNumber: z.string().min(1, "Serial number is required"),
-  purchasePlace: z.string().min(1, "Purchase place is required"),
+  modelNumber: z.string().optional(),
+  serialNumber: z.string().optional(),
+  purchasePlace: z.string().optional(),
   dateOfPurchase: z.string().optional(), // Will be converted to Date
   receiptNumber: z.string().optional(),
   status: caseStatusEnum.default("New Case"),
@@ -271,43 +271,43 @@ export const settingsSchema = z.object({
     inactivityAlertsEnabled: z.boolean().default(true),
     inactivityThresholdDays: z.number().min(1).max(30).default(7),
   }),
-  
+
   // Reminders Configuration
   remindersConfig: z.object({
     autoRemindersEnabled: z.boolean().default(true),
     defaultReminderInterval: z.enum(["daily", "weekly", "custom"]).default("weekly"),
     customReminderDays: z.number().optional(),
   }),
-  
+
   // Export Settings
   exportSettings: z.object({
     defaultFormat: z.enum(["excel", "pdf"]).default("excel"),
     includeFilters: z.boolean().default(true),
   }),
-  
+
   // Default Filters & Views
   defaultViews: z.object({
     dashboardFilter: z.enum(["all", "open", "pending", "closed"]).default("open"),
     defaultColumns: z.array(z.string()).default(["customerName", "status", "assignedTo", "createdAt"]),
   }),
-  
+
   // Auto-Status Rules
   autoStatusRules: z.object({
     enabled: z.boolean().default(false),
     inactivityDays: z.number().min(1).max(90).default(14),
     targetStatus: z.string().default("Pending Follow-Up"),
   }),
-  
+
   // Preferences
   preferences: z.object({
     timezone: z.string().default("UTC"),
     language: z.enum(["en", "en-US", "en-GB", "ar", "fr", "he", "es", "de", "it", "pt", "zh", "ja", "hi"]).default("en"),
     dateFormat: z.enum(["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]).default("DD/MM/YYYY"),
   }),
-  
+
   // User who owns these settings (null for global settings)
   userId: z.string().optional(),
-  
+
   // Metadata
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -320,29 +320,29 @@ export const updateSettingsSchema = z.object({
     inactivityAlertsEnabled: z.boolean().optional(),
     inactivityThresholdDays: z.number().min(1).max(30).optional(),
   }).optional(),
-  
+
   remindersConfig: z.object({
     autoRemindersEnabled: z.boolean().optional(),
     defaultReminderInterval: z.enum(["daily", "weekly", "custom"]).optional(),
     customReminderDays: z.number().optional(),
   }).optional(),
-  
+
   exportSettings: z.object({
     defaultFormat: z.enum(["excel", "pdf"]).optional(),
     includeFilters: z.boolean().optional(),
   }).optional(),
-  
+
   defaultViews: z.object({
     dashboardFilter: z.enum(["all", "open", "pending", "closed"]).optional(),
     defaultColumns: z.array(z.string()).optional(),
   }).optional(),
-  
+
   autoStatusRules: z.object({
     enabled: z.boolean().optional(),
     inactivityDays: z.number().min(1).max(90).optional(),
     targetStatus: z.string().optional(),
   }).optional(),
-  
+
   preferences: z.object({
     timezone: z.string().optional(),
     language: z.enum(["en", "en-US", "en-GB", "ar", "fr", "he", "es", "de", "it", "pt", "zh", "ja", "hi"]).optional(),

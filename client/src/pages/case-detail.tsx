@@ -15,9 +15,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
-import { 
-  insertInteractionHistorySchema, 
-  type InsertInteractionHistory, 
+import {
+  insertInteractionHistorySchema,
+  type InsertInteractionHistory,
   type ProductCaseWithHistory,
   caseStatusEnum,
   paymentStatusEnum,
@@ -148,8 +148,92 @@ export default function CaseDetailPage() {
     addNoteMutation.mutate(data.message);
   };
 
-  const onSubmitEdit = (data: any) => {
-    updateCaseMutation.mutate(data);
+  const onSubmitEdit = async (data: any) => {
+    if (!caseData) return;
+
+    // Track changes for interaction history
+    const changes: string[] = [];
+    const fieldLabels: Record<string, string> = {
+      modelNumber: "Model Number",
+      serialNumber: "Serial Number",
+      purchasePlace: "Purchase Place",
+      dateOfPurchase: "Date of Purchase",
+      receiptNumber: "Receipt Number",
+      status: "Status",
+      paymentStatus: "Payment Status",
+      repairNeeded: "Repair Needed",
+      initialSummary: "Initial Summary",
+      shippingCost: "Shipping Cost",
+      receivedDate: "Received Date",
+      shippedDate: "Shipped Date",
+    };
+
+    // Compare each field
+    Object.keys(fieldLabels).forEach((field) => {
+      const oldValue = caseData[field as keyof typeof caseData];
+      const newValue = data[field];
+
+      // For date fields, normalize to YYYY-MM-DD format for comparison
+      if (field.includes("Date")) {
+        const oldDate = oldValue ? new Date(String(oldValue)).toISOString().split('T')[0] : null;
+        const newDate = newValue ? (newValue.includes('T') ? new Date(newValue).toISOString().split('T')[0] : newValue) : null;
+
+        if (oldDate === newDate) return; // Skip if dates are the same
+        if (!oldDate && !newDate) return; // Skip if both are empty
+
+        const oldDisplay = oldDate ? new Date(oldDate).toLocaleDateString() : "(empty)";
+        const newDisplay = newDate ? new Date(newDate).toLocaleDateString() : "(empty)";
+
+        changes.push(`${fieldLabels[field]} changed from "${oldDisplay}" to "${newDisplay}"`);
+        return;
+      }
+
+      // For non-date fields
+      // Normalize empty values (treat null, undefined, empty string as same)
+      const normalizedOld = (oldValue === null || oldValue === undefined || oldValue === "") ? null : oldValue;
+      const normalizedNew = (newValue === null || newValue === undefined || newValue === "") ? null : newValue;
+
+      // Skip if values are the same (after normalization)
+      if (normalizedOld === normalizedNew) return;
+
+      // Also skip if both are effectively empty
+      if (!normalizedOld && !normalizedNew) return;
+
+      // Format the values for display
+      let oldDisplay = String(oldValue || "(empty)");
+      let newDisplay = String(newValue || "(empty)");
+
+      // Format shipping cost
+      if (field === "shippingCost") {
+        oldDisplay = `$${Number(oldValue || 0).toFixed(2)}`;
+        newDisplay = `$${Number(newValue || 0).toFixed(2)}`;
+        // Skip if amounts are the same
+        if (Number(oldValue || 0) === Number(newValue || 0)) return;
+      }
+
+      changes.push(`${fieldLabels[field]} changed from "${oldDisplay}" to "${newDisplay}"`);
+    });
+
+    // First, perform the actual update to the database
+    try {
+      await updateCaseMutation.mutateAsync(data);
+
+      // Only add changes to interaction history if there are any AND update was successful
+      if (changes.length > 0) {
+        const changeMessage = changes.join("; ");
+
+        // Add the changes as a note in the interaction history (not awaiting to avoid blocking)
+        apiRequest("POST", "/api/interactions", {
+          caseId: id,
+          type: "case_updated",
+          message: changeMessage,
+        }).catch(error => {
+          console.error("Error logging changes:", error);
+        });
+      }
+    } catch (error) {
+      console.error("Error updating case:", error);
+    }
   };
 
   const getInitials = (name: string) => {
@@ -162,17 +246,17 @@ export default function CaseDetailPage() {
 
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
-    
+
     // Title
     doc.setFontSize(18);
     doc.setFont("helvetica", "bold");
     doc.text("Case Details Report", pageWidth / 2, 20, { align: "center" });
-    
+
     // Case ID
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
     doc.text(`Case ID: ${caseData._id}`, 14, 35);
-    
+
     // Customer Information
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
@@ -200,7 +284,7 @@ export default function CaseDetailPage() {
     doc.setFont("helvetica", "bold");
     doc.text("Case Information", 14, currentY);
     currentY += 5;
-    
+
     const caseInfo = [
       ["Model Number", caseData.modelNumber],
       ["Serial Number", caseData.serialNumber],
@@ -241,7 +325,7 @@ export default function CaseDetailPage() {
 
     // Save PDF
     doc.save(`case-${caseData._id}-${new Date().toISOString().split('T')[0]}.pdf`);
-    
+
     toast({
       title: "Success",
       description: "Case details exported to PDF",
@@ -283,8 +367,19 @@ export default function CaseDetailPage() {
                 variant="outline"
                 onClick={() => {
                   setIsEditing(true);
+                  // Initialize all editable fields
+                  setEditValue("modelNumber", caseData.modelNumber);
+                  setEditValue("serialNumber", caseData.serialNumber);
+                  setEditValue("purchasePlace", caseData.purchasePlace);
+                  setEditValue("dateOfPurchase", caseData.dateOfPurchase ? new Date(caseData.dateOfPurchase).toISOString().split('T')[0] : "");
+                  setEditValue("receiptNumber", caseData.receiptNumber);
                   setEditValue("status", caseData.status);
                   setEditValue("paymentStatus", caseData.paymentStatus);
+                  setEditValue("repairNeeded", caseData.repairNeeded);
+                  setEditValue("initialSummary", caseData.initialSummary);
+                  setEditValue("shippingCost", caseData.shippingCost);
+                  setEditValue("receivedDate", caseData.receivedDate ? new Date(caseData.receivedDate).toISOString().split('T')[0] : "");
+                  setEditValue("shippedDate", caseData.shippedDate ? new Date(caseData.shippedDate).toISOString().split('T')[0] : "");
                 }}
                 data-testid="button-edit-case"
               >
@@ -328,12 +423,12 @@ export default function CaseDetailPage() {
       }
     >
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        <Breadcrumb 
+        <Breadcrumb
           items={[
             { label: "Customers", href: "/customers" },
             { label: caseData.customer.name, href: `/customers/${caseData.customer._id}` },
             { label: `Case: ${caseData.modelNumber}` }
-          ]} 
+          ]}
         />
         {/* Case Header */}
         <Card>
@@ -346,14 +441,13 @@ export default function CaseDetailPage() {
                   Customer: {caseData.customer.name} ({caseData.customer.customerId})
                 </p>
               </div>
-              <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap ${
-                caseData.status === 'New Case' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
+              <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap ${caseData.status === 'New Case' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
                 caseData.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300' :
-                caseData.status === 'Awaiting Parts' ? 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300' :
-                caseData.status === 'Repair Completed' ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' :
-                caseData.status === 'Shipped to Customer' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
-                'bg-gray-100 text-gray-800 dark:bg-gray-950 dark:text-gray-300'
-              }`} data-testid="text-case-status">
+                  caseData.status === 'Awaiting Parts' ? 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300' :
+                    caseData.status === 'Repair Completed' ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' :
+                      caseData.status === 'Shipped to Customer' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
+                        'bg-gray-100 text-gray-800 dark:bg-gray-950 dark:text-gray-300'
+                }`} data-testid="text-case-status">
                 {caseData.status}
               </span>
             </div>
@@ -369,41 +463,138 @@ export default function CaseDetailPage() {
             <CardContent className="space-y-4">
               {isEditing ? (
                 <form className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Status</Label>
-                    <Select
-                      value={watchEdit("status")}
-                      onValueChange={(value) => setEditValue("status", value)}
-                    >
-                      <SelectTrigger data-testid="select-edit-status">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {caseStatusEnum.options.map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Model Number</Label>
+                      <Input
+                        value={watchEdit("modelNumber") || ""}
+                        onChange={(e) => setEditValue("modelNumber", e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Serial Number</Label>
+                      <Input
+                        value={watchEdit("serialNumber") || ""}
+                        onChange={(e) => setEditValue("serialNumber", e.target.value)}
+                      />
+                    </div>
                   </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Purchase Place</Label>
+                      <Input
+                        value={watchEdit("purchasePlace") || ""}
+                        onChange={(e) => setEditValue("purchasePlace", e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Date of Purchase</Label>
+                      <Input
+                        type="date"
+                        value={watchEdit("dateOfPurchase") || ""}
+                        onChange={(e) => setEditValue("dateOfPurchase", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
-                    <Label>Payment Status</Label>
-                    <Select
-                      value={watchEdit("paymentStatus")}
-                      onValueChange={(value) => setEditValue("paymentStatus", value)}
-                    >
-                      <SelectTrigger data-testid="select-edit-payment">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {paymentStatusEnum.options.map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Receipt Number</Label>
+                    <Input
+                      value={watchEdit("receiptNumber") || ""}
+                      onChange={(e) => setEditValue("receiptNumber", e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select
+                        value={watchEdit("status")}
+                        onValueChange={(value) => setEditValue("status", value)}
+                      >
+                        <SelectTrigger data-testid="select-edit-status">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {caseStatusEnum.options.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {status}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Payment Status</Label>
+                      <Select
+                        value={watchEdit("paymentStatus")}
+                        onValueChange={(value) => setEditValue("paymentStatus", value)}
+                      >
+                        <SelectTrigger data-testid="select-edit-payment">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {paymentStatusEnum.options.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {status}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Repair Needed</Label>
+                    <Textarea
+                      value={watchEdit("repairNeeded") || ""}
+                      onChange={(e) => setEditValue("repairNeeded", e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>Shipping Cost ($)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={watchEdit("shippingCost") || 0}
+                        onChange={(e) => setEditValue("shippingCost", parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Received Date</Label>
+                      <Input
+                        type="date"
+                        value={watchEdit("receivedDate") || ""}
+                        onChange={(e) => setEditValue("receivedDate", e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Shipped Date</Label>
+                      <Input
+                        type="date"
+                        value={watchEdit("shippedDate") || ""}
+                        onChange={(e) => setEditValue("shippedDate", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Initial Summary</Label>
+                    <Textarea
+                      value={watchEdit("initialSummary") || ""}
+                      onChange={(e) => setEditValue("initialSummary", e.target.value)}
+                      rows={4}
+                      placeholder="Why are we opening this case?"
+                    />
                   </div>
                 </form>
               ) : (
@@ -424,12 +615,11 @@ export default function CaseDetailPage() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Payment Status</p>
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium mt-1 ${
-                      caseData.paymentStatus === 'Pending' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300' :
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium mt-1 ${caseData.paymentStatus === 'Pending' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300' :
                       caseData.paymentStatus === 'Paid by Customer' ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' :
-                      caseData.paymentStatus === 'Under Warranty' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
-                      'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
-                    }`}>
+                        caseData.paymentStatus === 'Under Warranty' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
+                          'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                      }`}>
                       {caseData.paymentStatus}
                     </span>
                   </div>
@@ -528,11 +718,10 @@ export default function CaseDetailPage() {
                         <p className="text-xs font-medium">
                           Update by {interaction.adminName}
                         </p>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                          interaction.adminRole === 'superadmin' 
-                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
-                            : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                        }`}>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${interaction.adminRole === 'superadmin'
+                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                          : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                          }`}>
                           {interaction.adminRole === 'superadmin' ? 'Super Admin' : 'Admin'}
                         </span>
                       </div>
