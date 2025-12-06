@@ -544,6 +544,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         shippedDate,
         receivedDate,
         initialSummary,
+        carrierCompany,
+        trackingNumber,
       } = req.body;
 
       // Only check for duplicate serial number if one is provided
@@ -574,6 +576,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           shippingCost: shippingCost || 0,
           shippedDate: shippedDate ? new Date(shippedDate) : undefined,
           receivedDate: receivedDate ? new Date(receivedDate) : undefined,
+          carrierCompany: carrierCompany || '',
+          trackingNumber: trackingNumber || '',
           initialSummary: initialSummary || '',
           createdBy: req.admin!._id,
         });
@@ -901,6 +905,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.body.repairNeeded !== undefined) updates.repairNeeded = req.body.repairNeeded;
       if (req.body.initialSummary !== undefined) updates.initialSummary = req.body.initialSummary;
       if (req.body.shippingCost !== undefined) updates.shippingCost = req.body.shippingCost;
+      if (req.body.carrierCompany !== undefined) updates.carrierCompany = req.body.carrierCompany;
+      if (req.body.trackingNumber !== undefined) updates.trackingNumber = req.body.trackingNumber;
 
       // Validate shippedDate
       if (req.body.shippedDate !== undefined) {

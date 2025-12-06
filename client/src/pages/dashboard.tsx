@@ -93,6 +93,15 @@ export default function DashboardPage() {
   const [showStatusUpdateDialog, setShowStatusUpdateDialog] = useState(false);
   const [statusUpdateData, setStatusUpdateData] = useState<any>(null);
 
+  // Shipment Dialog States
+  const [showShipmentDialog, setShowShipmentDialog] = useState(false);
+  const [shipmentForm, setShipmentForm] = useState({
+    carrierCompany: "",
+    shippedDate: new Date().toISOString().split('T')[0],
+    trackingNumber: "",
+    shippingCost: ""
+  });
+
   // Section collapse states - ALL COLLAPSED BY DEFAULT
   const [isQuickCasesExpanded, setIsQuickCasesExpanded] = useState(false);
 
@@ -272,8 +281,9 @@ export default function DashboardPage() {
     mutationFn: async (data: { id: string; updates: Partial<ProductCase> }) => {
       return await apiRequest("PATCH", `/api/cases/${data.id}`, data.updates);
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/cases'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/cases', variables.id] });
       toast({
         title: "Success",
         description: "Case updated successfully",
@@ -502,6 +512,10 @@ export default function DashboardPage() {
       purchasePlace: case_.purchasePlace,
       receiptNumber: case_.receiptNumber,
       dateOfPurchase: case_.dateOfPurchase,
+      carrierCompany: case_.carrierCompany,
+      trackingNumber: case_.trackingNumber,
+      shippingCost: case_.shippingCost,
+      shippedDate: case_.shippedDate,
     });
 
     // Fetch customer data
@@ -532,9 +546,13 @@ export default function DashboardPage() {
       receiptNumber: "Receipt Number",
       repairNeeded: "Repair Needed",
       initialSummary: "Initial Summary",
+      carrierCompany: "Carrier",
+      trackingNumber: "Tracking Number",
+      shippingCost: "Shipping Cost",
+      shippedDate: "Shipped Date",
     };
 
-    const dateFieldsForDiff = ["dateOfPurchase"];
+    const dateFieldsForDiff = ["dateOfPurchase", "shippedDate"];
     const changedData: Partial<ProductCase> = {};
 
     const normalizeDateValue = (value: any): string | null => {
@@ -606,6 +624,20 @@ export default function DashboardPage() {
         changes,
         newStatus: editFormData.status
       });
+
+      // Special handling for 'Shipped to Customer' status
+      if (editFormData.status === 'Shipped to Customer') {
+        // Pre-fill form with existing data if available
+        setShipmentForm({
+          carrierCompany: editingCase.carrierCompany || "",
+          shippedDate: new Date().toISOString().split('T')[0],
+          trackingNumber: editingCase.trackingNumber || "",
+          shippingCost: editFormData.shippingCost ? String(editFormData.shippingCost) : (editingCase.shippingCost ? String(editingCase.shippingCost) : "0")
+        });
+        setShowShipmentDialog(true);
+        return;
+      }
+
       setShowStatusUpdateDialog(true);
       return;
     }
@@ -655,6 +687,30 @@ export default function DashboardPage() {
 
     performUpdate(caseId, finalData, changes);
     setShowStatusUpdateDialog(false);
+    setStatusUpdateData(null);
+  };
+
+  const handleShipmentConfirm = (shouldNotify: boolean) => {
+    if (!statusUpdateData) return;
+
+    const { caseId, updates, changes } = statusUpdateData;
+
+    // Add shipment info to payload
+    const finalData = {
+      ...updates,
+      carrierCompany: shipmentForm.carrierCompany,
+      trackingNumber: shipmentForm.trackingNumber,
+      shippedDate: shipmentForm.shippedDate,
+      shippingCost: parseFloat(shipmentForm.shippingCost) || 0,
+      sendNotification: shouldNotify
+    };
+
+    // Note: We intentionally DO NOT add shipment details to 'changes' array 
+    // to prevent cluttering the interaction history, as requested.
+    // The history will only show the status change.
+
+    performUpdate(caseId, finalData, changes);
+    setShowShipmentDialog(false);
     setStatusUpdateData(null);
   };
 
@@ -2251,6 +2307,63 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
+
+
+                {editFormData.status === 'Shipped to Customer' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-2 border-purple-100 rounded-lg p-4 bg-purple-50/30">
+                    <div className="md:col-span-2 text-sm font-semibold text-purple-900 mb-1">Shipment Information</div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-carrier">Carrier</Label>
+                      <Input
+                        id="edit-carrier"
+                        value={editFormData.carrierCompany || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, carrierCompany: e.target.value })}
+                        placeholder="e.g. UPS, FedEx"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-tracking">Tracking #</Label>
+                      <Input
+                        id="edit-tracking"
+                        value={editFormData.trackingNumber || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, trackingNumber: e.target.value })}
+                        placeholder="Tracking Number"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-ship-cost">Shipping Cost ($)</Label>
+                      <Input
+                        id="edit-ship-cost"
+                        type="number"
+                        value={editFormData.shippingCost || 0}
+                        onChange={(e) => setEditFormData({ ...editFormData, shippingCost: parseFloat(e.target.value) || 0 })}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-ship-date" className="flex items-center gap-2">
+                        <CalendarIcon className="h-4 w-4" />
+                        Shipped Date
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="edit-ship-date"
+                          type="date"
+                          value={editFormData.shippedDate ? new Date(editFormData.shippedDate).toISOString().split('T')[0] : ''}
+                          onChange={(e) => setEditFormData({ ...editFormData, shippedDate: e.target.value ? new Date(e.target.value) : undefined })}
+                          className="pl-10"
+                          style={{
+                            colorScheme: 'light'
+                          }}
+                        />
+                        <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="edit-repair">Repair Needed</Label>
                   <Input
@@ -2305,7 +2418,8 @@ export default function DashboardPage() {
           setCompletionCaseData({});
           setCompletionSerialError("");
         }
-      }}>
+      }
+      }>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
@@ -2761,12 +2875,66 @@ export default function DashboardPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => handleStatusUpdateConfirm(false)}>
-              No, just update system
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleStatusUpdateConfirm(true)}>
-              Yes, send email
-            </AlertDialogAction>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleStatusUpdateConfirm(false)}>Update System Only</AlertDialogAction>
+            <AlertDialogAction onClick={() => handleStatusUpdateConfirm(true)}>Send Email & Update</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Shipment Details Dialog */}
+      <AlertDialog open={showShipmentDialog} onOpenChange={setShowShipmentDialog}>
+        <AlertDialogContent className="max-w-md sm:max-w-lg">
+          <AlertDialogHeader className="px-4 sm:px-10">
+            <AlertDialogTitle>Shipment Information</AlertDialogTitle>
+            <AlertDialogDescription>
+              Please enter the shipment details below. These will be included in the customer notification.
+            </AlertDialogDescription>
+            <div className="grid gap-4 py-6">
+              <div className="grid gap-2">
+                <Label htmlFor="dash-carrier">Carrier Company</Label>
+                <Input
+                  id="dash-carrier"
+                  value={shipmentForm.carrierCompany}
+                  onChange={(e) => setShipmentForm(prev => ({ ...prev, carrierCompany: e.target.value }))}
+                  placeholder="e.g. FedEx, UPS"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="dash-shipDate">Date of Shipping</Label>
+                <Input
+                  id="dash-shipDate"
+                  type="date"
+                  value={shipmentForm.shippedDate}
+                  onChange={(e) => setShipmentForm(prev => ({ ...prev, shippedDate: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="dash-tracking">Tracking Number</Label>
+                <Input
+                  id="dash-tracking"
+                  value={shipmentForm.trackingNumber}
+                  onChange={(e) => setShipmentForm(prev => ({ ...prev, trackingNumber: e.target.value }))}
+                  placeholder="Tracking #"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="dash-amount">Shipping Amount ($)</Label>
+                <Input
+                  id="dash-amount"
+                  type="number"
+                  step="0.01"
+                  value={shipmentForm.shippingCost}
+                  onChange={(e) => setShipmentForm(prev => ({ ...prev, shippingCost: e.target.value }))}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel className="mt-0">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleShipmentConfirm(false)}>Update System</AlertDialogAction>
+            <AlertDialogAction onClick={() => handleShipmentConfirm(true)}>Send Email & Update</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

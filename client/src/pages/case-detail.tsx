@@ -52,6 +52,14 @@ export default function CaseDetailPage() {
   const { admin } = useAuth();
   const { toast } = useToast();
 
+  const [showShipmentDialog, setShowShipmentDialog] = useState(false);
+  const [shipmentForm, setShipmentForm] = useState({
+    carrierCompany: "",
+    shippedDate: new Date().toISOString().split('T')[0],
+    trackingNumber: "",
+    shippingCost: ""
+  });
+
   const { data: caseData, isLoading } = useQuery<ProductCaseWithHistory>({
     queryKey: ['/api/cases', id],
     enabled: !!id,
@@ -111,6 +119,7 @@ export default function CaseDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/cases', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/cases'] });
       toast({
         title: "Success",
         description: "Case updated successfully",
@@ -170,6 +179,8 @@ export default function CaseDetailPage() {
       shippingCost: "Shipping Cost",
       receivedDate: "Received Date",
       shippedDate: "Shipped Date",
+      carrierCompany: "Carrier",
+      trackingNumber: "Tracking Number",
     };
 
     // Build a minimal payload containing only fields that actually changed
@@ -246,7 +257,26 @@ export default function CaseDetailPage() {
 
     if (data.status !== undefined && data.status !== caseData.status) {
       changedData.status = data.status;
-      // If status is changing, we need to ask user about notification
+
+      // Special handling for 'Shipped to Customer' status
+      if (data.status === 'Shipped to Customer') {
+        setStatusUpdateData({
+          changedData,
+          changes,
+          newStatus: data.status
+        });
+        // Pre-fill form with existing data if available
+        setShipmentForm({
+          carrierCompany: caseData.carrierCompany || "",
+          shippedDate: data.shippedDate ? new Date(data.shippedDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          trackingNumber: caseData.trackingNumber || "",
+          shippingCost: data.shippingCost ? String(data.shippingCost) : "0"
+        });
+        setShowShipmentDialog(true);
+        return;
+      }
+
+      // If status is changing (other than Shipped), we need to ask user about notification
       setStatusUpdateData({
         changedData,
         changes,
@@ -300,6 +330,32 @@ export default function CaseDetailPage() {
 
     performUpdate(finalData, changes);
     setShowStatusUpdateDialog(false);
+    setStatusUpdateData(null);
+  };
+
+  const handleShipmentConfirm = (shouldNotify: boolean) => {
+    if (!statusUpdateData) return;
+
+    const { changedData, changes } = statusUpdateData;
+
+    // Add shipment info to payload and changes
+    const finalData = {
+      ...changedData,
+      carrierCompany: shipmentForm.carrierCompany,
+      trackingNumber: shipmentForm.trackingNumber,
+      shippedDate: shipmentForm.shippedDate,
+      shippingCost: parseFloat(shipmentForm.shippingCost) || 0,
+      sendNotification: shouldNotify
+    };
+
+    // Add explicit history logs for shipment details
+    // changes.push(`Carrier: ${shipmentForm.carrierCompany || 'N/A'}`);
+    // changes.push(`Tracking #: ${shipmentForm.trackingNumber || 'N/A'}`);
+    // changes.push(`Ship Date: ${shipmentForm.shippedDate}`);
+    // changes.push(`Shipping Cost: $${finalData.shippingCost}`);
+
+    performUpdate(finalData, changes);
+    setShowShipmentDialog(false);
     setStatusUpdateData(null);
   };
 
@@ -387,6 +443,38 @@ export default function CaseDetailPage() {
       doc.text(splitSummary, 14, currentY);
     }
 
+    // Shipment Information
+    if (caseData.status === 'Shipped to Customer' || caseData.carrierCompany || caseData.trackingNumber) {
+      currentY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 20 : currentY + 20;
+
+      // Check if we need a new page
+      if (currentY > doc.internal.pageSize.getHeight() - 40) {
+        doc.addPage();
+        currentY = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("Shipment Information", 14, currentY);
+      currentY += 5;
+
+      const shipmentInfo = [
+        ["Carrier", caseData.carrierCompany || "N/A"],
+        ["Tracking Number", caseData.trackingNumber || "N/A"],
+        ["Date of Shipping", caseData.shippedDate ? format(new Date(caseData.shippedDate), 'MMM dd, yyyy') : "N/A"],
+        ["Shipping Amount", `$${(caseData.shippingCost || 0).toFixed(2)}`],
+      ];
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [],
+        body: shipmentInfo,
+        theme: "grid",
+        styles: { fontSize: 10 },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 50 } },
+      });
+    }
+
     // Interaction History removed from PDF export to prevent text overlapping
     // The full interaction history can be viewed on the case detail page
 
@@ -447,6 +535,8 @@ export default function CaseDetailPage() {
                   setEditValue("shippingCost", caseData.shippingCost);
                   setEditValue("receivedDate", caseData.receivedDate ? new Date(caseData.receivedDate).toISOString().split('T')[0] : "");
                   setEditValue("shippedDate", caseData.shippedDate ? new Date(caseData.shippedDate).toISOString().split('T')[0] : "");
+                  setEditValue("carrierCompany", caseData.carrierCompany);
+                  setEditValue("trackingNumber", caseData.trackingNumber);
                 }}
                 data-testid="button-edit-case"
               >
@@ -627,7 +717,7 @@ export default function CaseDetailPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Shipping Cost ($)</Label>
                       <Input
@@ -646,16 +736,41 @@ export default function CaseDetailPage() {
                         onChange={(e) => setEditValue("receivedDate", e.target.value)}
                       />
                     </div>
-
-                    <div className="space-y-2">
-                      <Label>Shipped Date</Label>
-                      <Input
-                        type="date"
-                        value={watchEdit("shippedDate") || ""}
-                        onChange={(e) => setEditValue("shippedDate", e.target.value)}
-                      />
-                    </div>
                   </div>
+
+                  {watchEdit("status") === 'Shipped to Customer' && (
+                    <div className="border-2 border-purple-100 rounded-lg p-4 bg-purple-50/30 mt-4">
+                      <div className="text-sm font-semibold text-purple-900 mb-2">Shipment Information</div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label>Shipped Date</Label>
+                          <Input
+                            type="date"
+                            value={watchEdit("shippedDate") || ""}
+                            onChange={(e) => setEditValue("shippedDate", e.target.value)}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Carrier</Label>
+                          <Input
+                            value={watchEdit("carrierCompany") || ""}
+                            onChange={(e) => setEditValue("carrierCompany", e.target.value)}
+                            placeholder="Carrier Name"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Tracking Number</Label>
+                          <Input
+                            value={watchEdit("trackingNumber") || ""}
+                            onChange={(e) => setEditValue("trackingNumber", e.target.value)}
+                            placeholder="Tracking #"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label>Initial Summary</Label>
@@ -723,6 +838,37 @@ export default function CaseDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Shipment Information Card */}
+          {(caseData.status === 'Shipped to Customer' || caseData.status === 'Closed' || caseData.carrierCompany || caseData.trackingNumber) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Shipment Information</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Carrier</p>
+                    <p className="font-medium">{caseData.carrierCompany || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Tracking Number</p>
+                    <p className="font-medium font-mono">{caseData.trackingNumber || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Date of Shipping</p>
+                    <p className="font-medium">
+                      {caseData.shippedDate ? format(new Date(caseData.shippedDate), 'MMM dd, yyyy') : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Shipping Amount</p>
+                    <p className="font-medium">${(caseData.shippingCost || 0).toFixed(2)}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Add Note */}
           <Card>
@@ -844,18 +990,70 @@ export default function CaseDetailPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Update Case Status</AlertDialogTitle>
             <AlertDialogDescription>
-              The case status has been updated to <strong>{statusUpdateData?.newStatus}</strong>.
-              <br /><br />
-              Do you want to send a status update email to the customer?
+              You are resolving a status change. Would you like to send a notification email to the customer?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => handleStatusUpdateConfirm(false)}>
-              No, just update system
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleStatusUpdateConfirm(true)}>
-              Yes, send email
-            </AlertDialogAction>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleStatusUpdateConfirm(false)}>Update System Only</AlertDialogAction>
+            <AlertDialogAction onClick={() => handleStatusUpdateConfirm(true)}>Send Email & Update</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Shipment Details Dialog */}
+      <AlertDialog open={showShipmentDialog} onOpenChange={setShowShipmentDialog}>
+        <AlertDialogContent className="max-w-md sm:max-w-lg">
+          <AlertDialogHeader className="px-4 sm:px-10">
+            <AlertDialogTitle>Shipment Information</AlertDialogTitle>
+            <AlertDialogDescription>
+              Please enter the shipment details below. These will be included in the customer notification.
+            </AlertDialogDescription>
+            <div className="grid gap-4 py-6">
+              <div className="grid gap-2">
+                <Label htmlFor="carrier">Carrier Company</Label>
+                <Input
+                  id="carrier"
+                  value={shipmentForm.carrierCompany}
+                  onChange={(e) => setShipmentForm(prev => ({ ...prev, carrierCompany: e.target.value }))}
+                  placeholder="e.g. FedEx, UPS"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="shipDate">Date of Shipping</Label>
+                <Input
+                  id="shipDate"
+                  type="date"
+                  value={shipmentForm.shippedDate}
+                  onChange={(e) => setShipmentForm(prev => ({ ...prev, shippedDate: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="tracking">Tracking Number</Label>
+                <Input
+                  id="tracking"
+                  value={shipmentForm.trackingNumber}
+                  onChange={(e) => setShipmentForm(prev => ({ ...prev, trackingNumber: e.target.value }))}
+                  placeholder="Tracking #"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="amount">Shipping Amount ($)</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  step="0.01"
+                  value={shipmentForm.shippingCost}
+                  onChange={(e) => setShipmentForm(prev => ({ ...prev, shippingCost: e.target.value }))}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel className="mt-0">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleShipmentConfirm(false)}>Update System</AlertDialogAction>
+            <AlertDialogAction onClick={() => handleShipmentConfirm(true)}>Send Email & Update</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

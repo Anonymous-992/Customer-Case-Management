@@ -108,6 +108,8 @@ export const productCaseSchema = z.object({
   shippingCost: z.number(),
   shippedDate: z.date().optional(),
   receivedDate: z.date().optional(),
+  carrierCompany: z.string().optional(),
+  trackingNumber: z.string().optional(),
   initialSummary: z.string(),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -131,6 +133,8 @@ export const insertProductCaseSchema = z.object({
   shippingCost: z.number().optional().default(0),
   shippedDate: z.string().optional(),
   receivedDate: z.string().optional(),
+  carrierCompany: z.string().optional(),
+  trackingNumber: z.string().optional(),
   isQuickCase: z.boolean().optional(), // Flag for quick cases with minimal info
 });
 

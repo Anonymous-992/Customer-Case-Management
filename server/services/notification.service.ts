@@ -194,7 +194,7 @@ function generateEmailContent(
   // Inline styles for email compatibility (reusing the beautiful styles)
   const styles = {
     body: "font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;",
-    container: "max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);",
+    container: "max-width: 800px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);",
     header: "background-color: #8CB9AE; padding: 30px 20px; text-align: center;",
     logo: "max-height: 60px; object-fit: contain;",
     content: "padding: 40px 30px;",
@@ -214,6 +214,10 @@ function generateEmailContent(
     footer: "text-align: center; padding: 20px; color: #94a3b8; font-size: 12px; background-color: #f8fafc; border-top: 1px solid #e2e8f0;",
     actionArea: "text-align: center; margin-top: 30px;",
     callButton: "display: inline-block; background-color: #8CB9AE; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600;",
+    badgeCarrier: "display: inline-block; max-width: 100%; word-break: break-all; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; background-color: #f3e8ff; color: #6b21a8;",
+    badgeTracking: "display: inline-block; max-width: 100%; word-break: break-all; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; background-color: #f1f5f9; color: #475569; font-family: monospace; letter-spacing: 0.5px;",
+    badgeDate: "display: inline-block; max-width: 100%; word-break: break-all; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; background-color: #ecfdf5; color: #047857;",
+    badgeAmount: "display: inline-block; max-width: 100%; word-break: break-all; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; background-color: #fff7ed; color: #c2410c;",
   };
 
   const getStatusExplanation = (status: string) => {
@@ -299,6 +303,48 @@ function generateEmailContent(
             <div style="${styles.explanationBox}">
               <p style="${styles.explanationText}">${getStatusExplanation(newStatus)}</p>
             </div>
+
+            ${newStatus === 'Shipped to Customer' ? `
+            <div style="margin: 25px 0;">
+               <span style="${styles.sectionTitle}">Shipment Information</span>
+               <div style="${styles.caseCard}">
+                 <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                   <tr>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0;">
+                      <span style="${styles.label}">Carrier</span>
+                    </td>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0; text-align: right;">
+                      <span style="${styles.badgeCarrier}">${productCase.carrierCompany || 'N/A'}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0;">
+                      <span style="${styles.label}">Tracking Number</span>
+                    </td>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0; text-align: right;">
+                      <span style="${styles.badgeTracking}">${productCase.trackingNumber || 'N/A'}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0;">
+                      <span style="${styles.label}">Date of Shipping</span>
+                    </td>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0; text-align: right;">
+                      <span style="${styles.badgeDate}">${productCase.shippedDate ? new Date(productCase.shippedDate).toLocaleDateString() : 'N/A'}</span>
+                    </td>
+                  </tr>
+                   <tr>
+                    <td style="padding: 8px 0;">
+                      <span style="${styles.label}">Shipping Amount</span>
+                    </td>
+                    <td style="padding: 8px 0; text-align: right;">
+                       <span style="${styles.badgeAmount}">$${(productCase.shippingCost || 0).toFixed(2)}</span>
+                    </td>
+                  </tr>
+                </table>
+               </div>
+            </div>
+            ` : ''}
             
             <p style="${styles.paragraph}">We’ll continue to keep you updated as your case moves forward. If we need any additional information, we’ll reach out directly.</p>
           </div>
@@ -423,7 +469,7 @@ export async function sendCaseCreatedEmail(
   // Inline styles for email compatibility
   const styles = {
     body: "font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;",
-    container: "max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);",
+    container: "max-width: 800px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);",
     header: "background-color: #8CB9AE; padding: 30px 20px; text-align: center;",
     logo: "max-height: 60px; object-fit: contain;",
     content: "padding: 40px 30px;",

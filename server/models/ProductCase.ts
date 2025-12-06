@@ -13,6 +13,8 @@ export interface IProductCase extends Document {
   shippingCost: number;
   shippedDate?: Date;
   receivedDate?: Date;
+  carrierCompany?: string;
+  trackingNumber?: string;
   initialSummary?: string;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -82,6 +84,16 @@ const ProductCaseSchema = new Schema<IProductCase>({
   receivedDate: {
     type: Date,
     required: false,
+  },
+  carrierCompany: {
+    type: String,
+    required: false,
+    default: '',
+  },
+  trackingNumber: {
+    type: String,
+    required: false,
+    default: '',
   },
   initialSummary: {
     type: String,
