@@ -48,6 +48,7 @@ export default function CustomerProfilePage() {
   const [editPhoneValue, setEditPhoneValue] = useState("");
   const [editPhoneError, setEditPhoneError] = useState<string>("");
   const [isCheckingEditPhone, setIsCheckingEditPhone] = useState(false);
+  const [activeTab, setActiveTab] = useState("info");
   const { toast } = useToast();
 
   const { data: customer, isLoading } = useQuery<CustomerWithCases>({
@@ -334,40 +335,43 @@ export default function CustomerProfilePage() {
       title={customer.name}
       actions={
         <div className="flex flex-col sm:flex-row gap-2 w-full">
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (isEditingCustomer) {
-                // Check for phone error before saving
-                if (editPhoneError) {
-                  toast({
-                    title: "Error",
-                    description: editPhoneError,
-                    variant: "destructive",
+
+          {activeTab === "info" && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (isEditingCustomer) {
+                  // Check for phone error before saving
+                  if (editPhoneError) {
+                    toast({
+                      title: "Error",
+                      description: editPhoneError,
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  // Save changes
+                  updateCustomerMutation.mutate(editCustomerData);
+                } else {
+                  // Enter edit mode
+                  setIsEditingCustomer(true);
+                  setEditCustomerData({
+                    name: customer.name,
+                    email: customer.email,
+                    address: customer.address,
+                    phone: customer.phone,
                   });
-                  return;
+                  setEditPhoneValue(customer.phone);
+                  setEditPhoneError("");
                 }
-                // Save changes
-                updateCustomerMutation.mutate(editCustomerData);
-              } else {
-                // Enter edit mode
-                setIsEditingCustomer(true);
-                setEditCustomerData({
-                  name: customer.name,
-                  email: customer.email,
-                  address: customer.address,
-                  phone: customer.phone,
-                });
-                setEditPhoneValue(customer.phone);
-                setEditPhoneError("");
-              }
-            }}
-            className="w-full sm:w-auto"
-            disabled={updateCustomerMutation.isPending || !!editPhoneError || isCheckingEditPhone}
-          >
-            <Edit2 className="h-4 w-4 mr-2" />
-            {isEditingCustomer ? (updateCustomerMutation.isPending ? "Saving..." : "Save Changes") : "Edit Info"}
-          </Button>
+              }}
+              className="w-full sm:w-auto"
+              disabled={updateCustomerMutation.isPending || !!editPhoneError || isCheckingEditPhone}
+            >
+              <Edit2 className="h-4 w-4 mr-2" />
+              {isEditingCustomer ? (updateCustomerMutation.isPending ? "Saving..." : "Save Changes") : "Edit Info"}
+            </Button>
+          )}
 
           {isEditingCustomer && (
             <Button
@@ -660,7 +664,7 @@ export default function CustomerProfilePage() {
           <p className="text-sm font-mono text-muted-foreground">{customer.customerId}</p>
         </div>
 
-        <Tabs defaultValue="info" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full max-w-md grid-cols-2">
             <TabsTrigger value="info" data-testid="tab-customer-info">Customer Info</TabsTrigger>
             <TabsTrigger value="cases" data-testid="tab-product-cases">

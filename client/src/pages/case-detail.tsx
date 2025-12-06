@@ -129,6 +129,9 @@ export default function CaseDetailPage() {
       return await apiRequest("DELETE", `/api/cases/${caseId}`, undefined);
     },
     onSuccess: () => {
+      if (caseData?.customer._id) {
+        queryClient.invalidateQueries({ queryKey: ['/api/customers', caseData.customer._id] });
+      }
       toast({
         title: "Success",
         description: "Case deleted successfully",

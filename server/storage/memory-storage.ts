@@ -204,7 +204,8 @@ class MemoryStorage {
         case_.status?.toLowerCase().includes(lowerQuery) ||
         case_.paymentStatus?.toLowerCase().includes(lowerQuery) ||
         case_.repairNeeded?.toLowerCase().includes(lowerQuery) ||
-        case_.initialSummary?.toLowerCase().includes(lowerQuery)
+        case_.initialSummary?.toLowerCase().includes(lowerQuery) ||
+        case_._id.toString().toLowerCase().includes(lowerQuery)
       )
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }

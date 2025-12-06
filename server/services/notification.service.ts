@@ -100,7 +100,7 @@ export async function sendEmailNotification(
 
   try {
     const emailContent = generateEmailContent(customer, productCase, oldStatus, newStatus);
-    
+
     const info = await emailTransporter.sendMail({
       from: `"${process.env.COMPANY_NAME || 'Case Management System'}" <${process.env.EMAIL_USER}>`,
       to: customer.email,
@@ -136,7 +136,7 @@ export async function sendSMSNotification(
 
   try {
     const smsContent = generateSMSContent(customer, productCase, newStatus);
-    
+
     const message = await twilioClient.messages.create({
       body: smsContent,
       from: process.env.TWILIO_PHONE_NUMBER!,
@@ -188,9 +188,9 @@ function generateEmailContent(
   newStatus: string
 ) {
   const companyName = process.env.COMPANY_NAME || 'Case Management System';
-  
+
   const subject = `Case Status Update: ${productCase.modelNumber} - ${newStatus}`;
-  
+
   const html = `
 <!DOCTYPE html>
 <html>
@@ -306,7 +306,7 @@ function generateSMSContent(
 // Get status-specific message
 function getStatusMessage(status: string, plainText: boolean = false): string {
   const messages: Record<string, string> = {
-    'New Case': plainText 
+    'New Case': plainText
       ? 'Your case has been received and assigned to our team. We will begin processing it shortly.'
       : '<p style="background-color: #eff6ff; padding: 15px; border-radius: 6px; border-left: 4px solid #2563eb;">Your case has been received and assigned to our team. We will begin processing it shortly.</p>',
     'In Progress': plainText
@@ -349,81 +349,127 @@ export async function sendCaseCreatedEmail(
   customerName: string,
   modelNumber: string,
   serialNumber: string,
-  status: string
+  status: string,
+  caseId: string
 ): Promise<boolean> {
   if (!emailTransporter) {
     console.log('📧 Email notification skipped: Service not configured');
     return false;
   }
 
-  const companyName = process.env.COMPANY_NAME || 'Case Management System';
+  // Handle empty fields with fallback
+  const displayModel = modelNumber || "to be provided";
+  const displaySerial = serialNumber || "to be provided";
+  const displayStatus = status || "to be provided";
+  const displayCaseId = caseId || "to be provided";
+
+  // Inline styles for email compatibility
+  const styles = {
+    body: "font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f1f5f9;",
+    container: "max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);",
+    header: "background-color: #8CB9AE; padding: 30px 20px; text-align: center;",
+    logo: "max-height: 45px; object-fit: contain;",
+    content: "padding: 40px 30px;",
+    greeting: "font-size: 18px; color: #0f172a; margin-bottom: 20px;",
+    paragraph: "margin-bottom: 20px;",
+    caseCard: "background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 25px 0;",
+    infoRow: "display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0;",
+    infoRowLast: "display: flex; justify-content: space-between; padding: 8px 0; border-bottom: none;",
+    label: "color: #64748b; font-weight: 500; font-size: 14px;",
+    value: "color: #0f172a; font-weight: 600; font-size: 14px; text-align: right;",
+    badgeId: "display: inline-block; max-width: 100%; word-break: break-all; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; background-color: #e0e7ff; color: #3730a3; font-family: monospace; letter-spacing: 0.5px;",
+    badgeModel: "display: inline-block; max-width: 100%; word-break: break-all; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; background-color: #e0f2fe; color: #075985;",
+    badgeSerial: "display: inline-block; max-width: 100%; word-break: break-all; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; background-color: #fef9c3; color: #92400e;",
+    badgeStatus: "display: inline-block; max-width: 100%; word-break: break-all; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; background-color: #dcfce7; color: #166534;",
+    sectionTitle: "font-weight: 700; color: #0f172a; margin-bottom: 10px; display: block;",
+    list: "padding-left: 20px; margin: 0;",
+    listItem: "margin-bottom: 8px; color: #475569;",
+    footer: "text-align: center; padding: 20px; color: #94a3b8; font-size: 12px; background-color: #f8fafc; border-top: 1px solid #e2e8f0;",
+    actionArea: "text-align: center; margin-top: 30px;",
+    callButton: "display: inline-block; background-color: #8CB9AE; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600;",
+  };
 
   try {
     const mailOptions = {
-      from: `"${companyName}" <${process.env.EMAIL_USER}>`,
+      from: `"AKITO Support" <${process.env.EMAIL_USER}>`,
       to: customerEmail,
-      subject: `New Case Created - ${modelNumber}`,
+      subject: `AKITO Support – Case Opened`,
       html: `
         <!DOCTYPE html>
         <html>
         <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #2563eb; color: white; padding: 20px; border-radius: 8px 8px 0 0; text-align: center; }
-            .content { background-color: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px; }
-            .case-details { background-color: #f9fafb; padding: 20px; border-radius: 6px; margin: 20px 0; }
-            .detail-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
-            .detail-label { font-weight: bold; color: #6b7280; }
-            .detail-value { color: #111827; }
-            .status-badge { display: inline-block; padding: 8px 16px; border-radius: 20px; font-weight: bold; }
-            .status-new { background-color: #dbeafe; color: #1e40af; }
-            .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }
-            .button { display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-          </style>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
         </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>Case Created Successfully</h1>
+        <body style="${styles.body}">
+          <div style="${styles.container}">
+            <div style="${styles.header}">
+              <img src="https://res.cloudinary.com/dppivk4xs/image/upload/v1765005632/logo_h7llhd.png" alt="AKITO" style="${styles.logo}">
             </div>
-            <div class="content">
-              <p>Dear ${customerName},</p>
+            <div style="${styles.content}">
+              <div style="${styles.greeting}">Hi ${customerName} 👋,</div>
               
-              <p>Your repair case has been successfully created in our system. We have received your device and our team will begin processing it shortly.</p>
+              <p style="${styles.paragraph}">Thank you for contacting AKITO Support. We’ve opened a case for your product and will guide you through each step.</p>
               
-              <div class="case-details">
-                <h2 style="margin-top: 0; color: #2563eb;">Case Details</h2>
-                <div class="detail-row">
-                  <span class="detail-label">Product Model:</span>
-                  <span class="detail-value">${modelNumber}</span>
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Serial Number:</span>
-                  <span class="detail-value">${serialNumber}</span>
-                </div>
-                <div class="detail-row">
-                  <span class="detail-label">Status:</span>
-                  <span class="detail-value"><span class="status-badge status-new">${status}</span></span>
-                </div>
+              <div style="${styles.caseCard}">
+                <!-- Using table for better layout support in older email clients -->
+                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0;">
+                      <span style="${styles.label}">Case ID</span>
+                    </td>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0; text-align: right; word-break: break-all;">
+                      <span style="${styles.badgeId}">${displayCaseId}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0;">
+                      <span style="${styles.label}">Model</span>
+                    </td>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0; text-align: right; word-break: break-all;">
+                      <span style="${styles.badgeModel}">${displayModel}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0;">
+                      <span style="${styles.label}">Serial Number</span>
+                    </td>
+                    <td style="padding: 8px 0; border-bottom: 1px solid #e2e8f0; text-align: right; word-break: break-all;">
+                      <span style="${styles.badgeSerial}">${displaySerial}</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 8px 0;">
+                      <span style="${styles.label}">Status</span>
+                    </td>
+                    <td style="padding: 8px 0; text-align: right; word-break: break-all;">
+                       <span style="${styles.badgeStatus}">${displayStatus}</span>
+                    </td>
+                  </tr>
+                </table>
               </div>
 
-              ${getStatusMessage(status)}
+              <div style="margin: 25px 0;">
+                <span style="${styles.sectionTitle}">Next Steps</span>
+                <ul style="${styles.list}">
+                  <li style="${styles.listItem}">We’ll notify you as soon as we receive your device.</li>
+                  <li style="${styles.listItem}">Our team will inspect it and keep you updated throughout the process.</li>
+                  <li style="${styles.listItem}">The full process may take up to 14 business days.</li>
+                </ul>
+              </div>
               
-              <p><strong>What's Next?</strong></p>
-              <ul>
-                <li>Our technicians will inspect your device</li>
-                <li>We'll keep you updated on the progress via email</li>
-                <li>You can contact us anytime if you have questions</li>
-              </ul>
+              <p style="${styles.paragraph}">Feel free to contact us if you have any questions. 😊 Have a great day! 🌟</p>
               
-              <p>Thank you for choosing ${companyName}!</p>
-              
-              <p>Best regards,<br>${companyName} Team</p>
+              <div style="${styles.actionArea}">
+                <p style="margin-bottom: 20px; font-weight: 600; color: #0f172a;">AKITO SUPPORT TEAM</p>
+                
+                <a href="tel:7188133001" style="${styles.callButton}">
+                 <span style="display: inline-block; width: 22px; height: 22px; border-radius: 9999px; background-color: rgba(255, 255, 255, 0.18); text-align: center; line-height: 22px; margin-right: 8px; font-size: 13px;">&#9743;</span>
+                 <span style="vertical-align: middle; font-weight: 600; letter-spacing: 0.03em;">718-813-3001</span>
+                </a>
+              </div>
             </div>
-            <div class="footer">
-              <p>This is an automated email. Please do not reply directly to this message.</p>
-              <p>&copy; ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
+            <div style="${styles.footer}">
+              <p>&copy; Rinko USA Inc. dba AKITO</p>
             </div>
           </div>
         </body>

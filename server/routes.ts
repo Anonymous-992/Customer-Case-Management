@@ -459,18 +459,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (q && typeof q === 'string' && q.trim().length > 0) {
         // Search mode - only if query is not empty
         const searchQuery = q.trim();
+        const searchConditions: any[] = [
+          { modelNumber: { $regex: searchQuery, $options: 'i' } },
+          { serialNumber: { $regex: searchQuery, $options: 'i' } },
+          { purchasePlace: { $regex: searchQuery, $options: 'i' } },
+          { receiptNumber: { $regex: searchQuery, $options: 'i' } },
+          { status: { $regex: searchQuery, $options: 'i' } },
+          { paymentStatus: { $regex: searchQuery, $options: 'i' } },
+          { repairNeeded: { $regex: searchQuery, $options: 'i' } },
+          { initialSummary: { $regex: searchQuery, $options: 'i' } },
+        ];
+
+        // Add ID search allowing partial matches by converting _id to string
+        // Note: $regexMatch requires MongoDB 4.2+
+        searchConditions.push({
+          $expr: {
+            $regexMatch: {
+              input: { $toString: "$_id" },
+              regex: searchQuery,
+              options: "i"
+            }
+          }
+        });
+
         cases = isMongoDBAvailable
           ? await ProductCase.find({
-            $or: [
-              { modelNumber: { $regex: searchQuery, $options: 'i' } },
-              { serialNumber: { $regex: searchQuery, $options: 'i' } },
-              { purchasePlace: { $regex: searchQuery, $options: 'i' } },
-              { receiptNumber: { $regex: searchQuery, $options: 'i' } },
-              { status: { $regex: searchQuery, $options: 'i' } },
-              { paymentStatus: { $regex: searchQuery, $options: 'i' } },
-              { repairNeeded: { $regex: searchQuery, $options: 'i' } },
-              { initialSummary: { $regex: searchQuery, $options: 'i' } },
-            ]
+            $or: searchConditions
           }).sort({ createdAt: -1 })
           : await memoryStorage.searchCases(searchQuery);
       } else {
@@ -616,26 +630,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Send email notification to customer about new case (only if we have required info)
-      if (modelNumber && serialNumber) {
-        try {
-          const customer = isMongoDBAvailable
-            ? await Customer.findById(customerId)
-            : await memoryStorage.findCustomerById(customerId);
+      // Send email notification to customer about new case
+      try {
+        const customer = isMongoDBAvailable
+          ? await Customer.findById(customerId)
+          : await memoryStorage.findCustomerById(customerId);
 
-          if (customer && customer.notificationPreferences?.email) {
-            await notificationService.sendCaseCreatedEmail(
-              customer.email,
-              customer.name,
-              modelNumber,
-              serialNumber,
-              status || 'New Case'
-            );
-          }
-        } catch (emailError) {
-          console.error('Failed to send case creation email:', emailError);
-          // Don't fail the request if email fails
+        if (customer && customer.notificationPreferences?.email) {
+          await notificationService.sendCaseCreatedEmail(
+            customer.email,
+            customer.name,
+            modelNumber || '',
+            serialNumber || '',
+            status || 'New Case',
+            productCase._id.toString()
+          );
         }
+      } catch (emailError) {
+        console.error('Failed to send case creation email:', emailError);
+        // Don't fail the request if email fails
       }
 
       res.status(201).json(productCase);
@@ -1229,7 +1242,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             customer.name,
             productCase.modelNumber,
             productCase.serialNumber,
-            productCase.status
+            productCase.status,
+            productCase._id.toString()
           );
         }
       } catch (emailError) {
@@ -1851,7 +1865,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'Test User',
         'Test Model',
         'TEST-123',
-        'New Case'
+        'New Case',
+        'TEST-CASE-ID-123'
       );
 
       res.json({
