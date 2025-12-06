@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IInteractionHistory extends Document {
   caseId?: mongoose.Types.ObjectId;
   customerId?: mongoose.Types.ObjectId;
-  type: 'case_created' | 'case_updated' | 'status_changed' | 'note_added' | 'case_deleted' | 'customer_created' | 'customer_updated' | 'customer_deleted';
+  type: 'case_created' | 'case_updated' | 'status_changed' | 'note_added' | 'case_deleted' | 'customer_created' | 'customer_updated' | 'customer_deleted' | 'payment_updated';
   message: string;
   adminId: mongoose.Types.ObjectId;
   adminName: string;
@@ -24,7 +24,7 @@ const InteractionHistorySchema = new Schema<IInteractionHistory>({
   },
   type: {
     type: String,
-    enum: ['case_created', 'case_updated', 'status_changed', 'note_added', 'case_deleted', 'customer_created', 'customer_updated', 'customer_deleted'],
+    enum: ['case_created', 'case_updated', 'status_changed', 'note_added', 'case_deleted', 'customer_created', 'customer_updated', 'customer_deleted', 'payment_updated'],
     required: true,
   },
   message: {

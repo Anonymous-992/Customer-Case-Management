@@ -949,25 +949,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await memoryStorage.createInteraction(interactionData);
         }
 
-        // Send notification to customer about status change
-        try {
-          const customer = isMongoDBAvailable
-            ? await Customer.findById(existingCase.customerId)
-            : await memoryStorage.findCustomerById(existingCase.customerId);
+        // Send notification to customer about status change ONLY if requested
+        if (req.body.sendNotification === true) {
+          try {
+            const customer = isMongoDBAvailable
+              ? await Customer.findById(existingCase.customerId)
+              : await memoryStorage.findCustomerById(existingCase.customerId);
 
-          if (customer && productCase) {
-            const notificationResults = await notificationService.sendCaseStatusNotification(
-              customer,
-              productCase,
-              oldStatus,
-              req.body.status
-            );
+            if (customer && productCase) {
+              const notificationResults = await notificationService.sendCaseStatusNotification(
+                customer,
+                productCase,
+                oldStatus,
+                req.body.status
+              );
 
-            console.log('Notification results:', notificationResults);
+              console.log('Notification results:', notificationResults);
+            }
+          } catch (notificationError: any) {
+            console.error('Failed to send notification:', notificationError.message);
+            // Don't fail the request if notification fails
           }
-        } catch (notificationError: any) {
-          console.error('Failed to send notification:', notificationError.message);
-          // Don't fail the request if notification fails
         }
       }
 

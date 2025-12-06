@@ -47,6 +47,8 @@ export default function CaseDetailPage() {
   const [, setLocation] = useLocation();
   const [deleteCaseId, setDeleteCaseId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [showStatusUpdateDialog, setShowStatusUpdateDialog] = useState(false);
+  const [statusUpdateData, setStatusUpdateData] = useState<any>(null);
   const { admin } = useAuth();
   const { toast } = useToast();
 
@@ -242,19 +244,35 @@ export default function CaseDetailPage() {
       changedData[field] = newValue;
     });
 
-    // Status and paymentStatus are logged by backend, but should still be updated only if changed
     if (data.status !== undefined && data.status !== caseData.status) {
       changedData.status = data.status;
+      // If status is changing, we need to ask user about notification
+      setStatusUpdateData({
+        changedData,
+        changes,
+        newStatus: data.status
+      });
+      setShowStatusUpdateDialog(true);
+      return;
     }
+
     if (data.paymentStatus !== undefined && data.paymentStatus !== caseData.paymentStatus) {
       changedData.paymentStatus = data.paymentStatus;
     }
 
     try {
-      await updateCaseMutation.mutateAsync(changedData);
+      await performUpdate(changedData, changes);
+    } catch (error) {
+      console.error("Error updating case:", error);
+    }
+  };
 
-      if (changes.length > 0) {
-        const changeMessage = changes.join("; ");
+  const performUpdate = async (dataToUpdate: any, historyChanges: string[]) => {
+    try {
+      await updateCaseMutation.mutateAsync(dataToUpdate);
+
+      if (historyChanges.length > 0) {
+        const changeMessage = historyChanges.join("; ");
 
         apiRequest("POST", "/api/interactions", {
           caseId: id,
@@ -267,6 +285,22 @@ export default function CaseDetailPage() {
     } catch (error) {
       console.error("Error updating case:", error);
     }
+  };
+
+  const handleStatusUpdateConfirm = (shouldNotify: boolean) => {
+    if (!statusUpdateData) return;
+
+    const { changedData, changes } = statusUpdateData;
+
+    // Add notification flag to payload
+    const finalData = {
+      ...changedData,
+      sendNotification: shouldNotify
+    };
+
+    performUpdate(finalData, changes);
+    setShowStatusUpdateDialog(false);
+    setStatusUpdateData(null);
   };
 
   const getInitials = (name: string) => {
@@ -800,6 +834,27 @@ export default function CaseDetailPage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showStatusUpdateDialog} onOpenChange={setShowStatusUpdateDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Update Case Status</AlertDialogTitle>
+            <AlertDialogDescription>
+              The case status has been updated to <strong>{statusUpdateData?.newStatus}</strong>.
+              <br /><br />
+              Do you want to send a status update email to the customer?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => handleStatusUpdateConfirm(false)}>
+              No, just update system
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleStatusUpdateConfirm(true)}>
+              Yes, send email
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

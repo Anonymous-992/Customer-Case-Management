@@ -177,6 +177,7 @@ export const interactionTypeEnum = z.enum([
   "customer_created",
   "customer_updated",
   "customer_deleted",
+  "payment_updated",
 ]);
 
 export const interactionHistorySchema = z.object({

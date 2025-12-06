@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Link, useLocation } from "wouter";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { UnifiedSearch } from "@/components/unified-search";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -89,6 +90,8 @@ export default function DashboardPage() {
   const [customerPhoneValue, setCustomerPhoneValue] = useState("");
   const [customerPhoneError, setCustomerPhoneError] = useState<string>("");
   const [isCheckingCustomerPhone, setIsCheckingCustomerPhone] = useState(false);
+  const [showStatusUpdateDialog, setShowStatusUpdateDialog] = useState(false);
+  const [statusUpdateData, setStatusUpdateData] = useState<any>(null);
 
   // Section collapse states - ALL COLLAPSED BY DEFAULT
   const [isQuickCasesExpanded, setIsQuickCasesExpanded] = useState(false);
@@ -593,27 +596,41 @@ export default function DashboardPage() {
       (changedData as any)[field] = newValue;
     });
 
-    // Status and paymentStatus are logged by backend as separate status_changed interactions,
-    // but we should still only send them if they actually changed.
+    // Status and Payment Status changes
+    // If status is changing, we need to ask user about notification
     if (editFormData.status && editFormData.status !== editingCase.status) {
       changedData.status = editFormData.status;
+      setStatusUpdateData({
+        caseId: editingCase._id,
+        updates: changedData,
+        changes,
+        newStatus: editFormData.status
+      });
+      setShowStatusUpdateDialog(true);
+      return;
     }
+
     if (editFormData.paymentStatus && editFormData.paymentStatus !== editingCase.paymentStatus) {
       changedData.paymentStatus = editFormData.paymentStatus;
     }
 
+    // If no status change, proceed with update
+    performUpdate(editingCase._id, changedData, changes);
+  };
+
+  const performUpdate = async (caseId: string, updates: any, changes: string[]) => {
     try {
       await updateCaseMutation.mutateAsync({
-        id: editingCase._id,
-        updates: changedData,
+        id: caseId,
+        updates: updates,
       });
 
-      // Only log interaction history if we actually changed non-status fields
+      // Only log interaction history if we actually changed non-status fields (status interactions handled by backend/above logic)
       if (changes.length > 0) {
         const changeMessage = changes.join("; ");
 
         apiRequest("POST", "/api/interactions", {
-          caseId: editingCase._id,
+          caseId: caseId,
           type: "case_updated",
           message: changeMessage,
         }).catch((error) => {
@@ -623,6 +640,22 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("Error updating case from dashboard quick edit:", error);
     }
+  };
+
+  const handleStatusUpdateConfirm = (shouldNotify: boolean) => {
+    if (!statusUpdateData) return;
+
+    const { caseId, updates, changes } = statusUpdateData;
+
+    // Add notification flag to payload
+    const finalData = {
+      ...updates,
+      sendNotification: shouldNotify
+    };
+
+    performUpdate(caseId, finalData, changes);
+    setShowStatusUpdateDialog(false);
+    setStatusUpdateData(null);
   };
 
   const handleCloseCreateDialog = () => {
@@ -2716,6 +2749,27 @@ export default function DashboardPage() {
           </form>
         </DialogContent>
       </Dialog >
+
+      <AlertDialog open={showStatusUpdateDialog} onOpenChange={setShowStatusUpdateDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Update Case Status</AlertDialogTitle>
+            <AlertDialogDescription>
+              The case status has been updated to <strong>{statusUpdateData?.newStatus}</strong>.
+              <br /><br />
+              Do you want to send a status update email to the customer?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => handleStatusUpdateConfirm(false)}>
+              No, just update system
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleStatusUpdateConfirm(true)}>
+              Yes, send email
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout >
   );
 }
