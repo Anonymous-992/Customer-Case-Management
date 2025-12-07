@@ -57,7 +57,7 @@ export default function CustomersPage() {
           },
         });
         const data = await response.json();
-        
+
         if (data.exists) {
           setPhoneError(`Phone number already exists for ${data.customer.name} (${data.customer.customerId})`);
         } else {
@@ -135,9 +135,9 @@ export default function CustomersPage() {
       { key: "phone", label: "Phone" },
       { key: "email", label: "Email" },
       { key: "address", label: "Address" },
-      { 
-        key: "createdAt", 
-        label: "Registered", 
+      {
+        key: "createdAt",
+        label: "Registered",
         format: (date) => formatDate(date)
       },
     ];
@@ -147,7 +147,7 @@ export default function CustomersPage() {
       sheetName: "Customers",
       columns,
       data: filteredCustomers,
-      title: "Case Management - Customers Export",
+      title: "All Customers Data",
     });
 
     toast({

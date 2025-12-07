@@ -804,7 +804,7 @@ export default function DashboardPage() {
     }
 
     const columns: ExportColumn[] = [
-      { key: "caseId", label: "Case ID" },
+      { key: "_id", label: "Case ID" },
       {
         key: "customerId",
         label: "Customer",
@@ -812,11 +812,9 @@ export default function DashboardPage() {
       },
       { key: "modelNumber", label: "Model" },
       { key: "serialNumber", label: "Serial Number" },
-      { key: "repairNeeded", label: "Repair Needed" },
       { key: "status", label: "Status" },
       { key: "paymentStatus", label: "Payment Status" },
       { key: "purchasePlace", label: "Store" },
-      { key: "assignedTo", label: "Assigned To" },
       {
         key: "createdAt",
         label: "Created",
@@ -829,7 +827,7 @@ export default function DashboardPage() {
       sheetName: "Cases",
       columns,
       data: dataToExport,
-      title: "Case Management - All Cases Export",
+      title: "All Cases Data",
     });
 
     toast({
@@ -854,7 +852,7 @@ export default function DashboardPage() {
     }
 
     const columns: ExportColumn[] = [
-      { key: "caseId", label: "Case ID" },
+      { key: "_id", label: "Case ID" },
       {
         key: "customerId",
         label: "Customer",
@@ -862,11 +860,9 @@ export default function DashboardPage() {
       },
       { key: "modelNumber", label: "Model" },
       { key: "serialNumber", label: "Serial Number" },
-      { key: "repairNeeded", label: "Repair Needed" },
       { key: "status", label: "Status" },
       { key: "paymentStatus", label: "Payment Status" },
       { key: "purchasePlace", label: "Store" },
-      { key: "assignedTo", label: "Assigned To" },
       {
         key: "createdAt",
         label: "Created",
@@ -883,7 +879,7 @@ export default function DashboardPage() {
       sheetName: storeName || "Open Cases",
       columns,
       data: casesToExport,
-      title: `Case Management - ${storeName || 'Open Cases by Store'}`,
+      title: `${storeName || 'Open Cases by Store'}`,
     });
 
     toast({
