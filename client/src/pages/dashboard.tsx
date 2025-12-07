@@ -41,6 +41,18 @@ export default function DashboardPage() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterPayment, setFilterPayment] = useState<string>("all");
 
+  // Serial check state for editing
+  const [editSerialError, setEditSerialError] = useState("");
+  const [isCheckingEditSerial, setIsCheckingEditSerial] = useState(false);
+
+  // Email confirmation state
+  const [showCreateCaseEmailConfirm, setShowCreateCaseEmailConfirm] = useState(false);
+  const [pendingCreateCaseData, setPendingCreateCaseData] = useState<any>(null);
+
+  // Quick Case completion email confirmation
+  const [showQuickCaseEmailConfirm, setShowQuickCaseEmailConfirm] = useState(false);
+  const [pendingQuickCaseCompletionData, setPendingQuickCaseCompletionData] = useState<any>(null);
+
   // Store-wise case pagination
   const [storeCasesLimit, setStoreCasesLimit] = useState<Record<string, number>>({});
 
@@ -291,9 +303,30 @@ export default function DashboardPage() {
       setEditingCase(null);
     },
     onError: (error: Error) => {
+      let message = error.message || "Failed to update case";
+
+      // Try to unwrap API error messages of the form "400: {\"message\":...}"
+      try {
+        const match = message.match(/^\d+:\s*(.*)$/);
+        if (match) {
+          const parsed = JSON.parse(match[1]);
+          if (parsed && typeof parsed.message === "string") {
+            message = parsed.message;
+          }
+        }
+      } catch {
+        // Ignore JSON parse errors and fall back to the original message
+      }
+
+      // If this is a serial number duplicate error, surface it inline on the input only
+      if (message.includes("Serial number already exists")) {
+        setEditSerialError(message);
+        return;
+      }
+
       toast({
         title: "Error",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     },
@@ -502,6 +535,9 @@ export default function DashboardPage() {
   const handleEditCase = async (case_: ProductCase, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    // Reset any previous serial validation state when opening the dialog
+    setEditSerialError("");
+    setIsCheckingEditSerial(false);
     setEditingCase(case_);
     setEditFormData({
       status: case_.status,
@@ -536,6 +572,11 @@ export default function DashboardPage() {
 
   const handleUpdateCase = async () => {
     if (!editingCase) return;
+
+    // Prevent update if serial validation has failed (inline error already shown)
+    if (editSerialError) {
+      return;
+    }
 
     // Build change log and minimal payload so we only update & log fields that actually changed
     const changes: string[] = [];
@@ -931,7 +972,6 @@ export default function DashboardPage() {
       return;
     }
 
-    // Ensure default values for optional fields
     const submitData = {
       ...data,
       status: data.status || "New Case",
@@ -939,8 +979,16 @@ export default function DashboardPage() {
       shippingCost: data.shippingCost || 0,
     };
 
-    console.log("Submitting to mutation:", submitData);
-    createCaseMutation.mutate(submitData);
+    setPendingCreateCaseData(submitData);
+    setShowCreateCaseEmailConfirm(true);
+  };
+
+  const handleCreateCaseConfirm = (sendEmail: boolean) => {
+    if (pendingCreateCaseData) {
+      createCaseMutation.mutate({ ...pendingCreateCaseData, sendNotification: sendEmail });
+      setShowCreateCaseEmailConfirm(false);
+      setPendingCreateCaseData(null);
+    }
   };
 
   const onSubmitCustomer = (data: InsertCustomer) => {
@@ -1092,6 +1140,57 @@ export default function DashboardPage() {
   };
 
   const isLoading = customersLoading || casesLoading;
+
+  // Effect to check serial number on edit
+  useEffect(() => {
+    const currentSerial = editFormData.serialNumber;
+
+    // If no case is currently being edited, reset validation state
+    if (!editingCase) {
+      setIsCheckingEditSerial(false);
+      setEditSerialError("");
+      return;
+    }
+
+    // Skip validation if empty or same as original
+    if (!currentSerial || !currentSerial.trim() || currentSerial === editingCase.serialNumber) {
+      setEditSerialError("");
+      setIsCheckingEditSerial(false);
+      return;
+    }
+
+    setIsCheckingEditSerial(true);
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        const data: any = await apiRequest("GET", `/api/cases/check-serial?serialNumber=${encodeURIComponent(currentSerial)}&excludeId=${editingCase._id}`);
+        if (data.exists) {
+          setEditSerialError(data.message || "Serial number already exists");
+        } else {
+          setEditSerialError("");
+        }
+      } catch (error) {
+        console.error("Failed to check serial:", error);
+      } finally {
+        setIsCheckingEditSerial(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [editFormData.serialNumber, editingCase]);
+
+  const handleQuickCaseCompletionConfirm = (sendEmail: boolean) => {
+    if (selectedQuickCase && pendingQuickCaseCompletionData) {
+      completeQuickCaseMutation.mutate({
+        id: selectedQuickCase._id,
+        customerInfo: pendingQuickCaseCompletionData.customerInfo,
+        caseInfo: pendingQuickCaseCompletionData.caseInfo,
+        sendNotification: sendEmail
+      } as any);
+      setShowQuickCaseEmailConfirm(false);
+      setPendingQuickCaseCompletionData(null);
+    }
+  };
 
   return (
     <DashboardLayout
@@ -2221,7 +2320,20 @@ export default function DashboardPage() {
                       value={editFormData.serialNumber || ''}
                       onChange={(e) => setEditFormData({ ...editFormData, serialNumber: e.target.value })}
                       placeholder="Enter serial number"
+                      className={editSerialError ? "border-destructive" : ""}
                     />
+                    {isCheckingEditSerial && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Clock className="h-3 w-3 animate-spin" />
+                        Checking serial...
+                      </p>
+                    )}
+                    {!isCheckingEditSerial && editSerialError && (
+                      <p className="text-xs text-destructive flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {editSerialError}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -2393,7 +2505,7 @@ export default function DashboardPage() {
                 </Button>
                 <Button
                   onClick={handleUpdateCase}
-                  disabled={updateCaseMutation.isPending}
+                  disabled={updateCaseMutation.isPending || isCheckingEditSerial || !!editSerialError}
                   className="flex-1"
                 >
                   {updateCaseMutation.isPending ? "Saving..." : "Save Changes"}
@@ -2548,7 +2660,7 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Model Number */}
                   <div className="space-y-2">
-                    <Label htmlFor="case-model">Model Number *</Label>
+                    <Label htmlFor="case-model">Model Number</Label>
                     <Input
                       id="case-model"
                       placeholder="e.g., iPhone 13 Pro, Samsung Galaxy S21"
@@ -2559,7 +2671,7 @@ export default function DashboardPage() {
 
                   {/* Serial Number with Validation */}
                   <div className="space-y-2">
-                    <Label htmlFor="case-serial">Serial Number *</Label>
+                    <Label htmlFor="case-serial">Serial Number</Label>
                     <Input
                       id="case-serial"
                       placeholder="Unique serial number"
@@ -2583,7 +2695,7 @@ export default function DashboardPage() {
 
                   {/* Store/Purchase Place */}
                   <div className="space-y-2">
-                    <Label htmlFor="case-store">Store / Purchase Place *</Label>
+                    <Label htmlFor="case-store">Store / Purchase Place</Label>
                     <Input
                       id="case-store"
                       placeholder="e.g., Delhi, Mumbai, Bangalore"
@@ -2674,7 +2786,7 @@ export default function DashboardPage() {
 
                   {/* Repair Needed */}
                   <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="case-repair">Repair Needed *</Label>
+                    <Label htmlFor="case-repair">Repair Needed</Label>
                     <Input
                       id="case-repair"
                       placeholder="e.g., Screen replacement, Battery issue"
@@ -2707,16 +2819,6 @@ export default function DashboardPage() {
                 </Button>
                 <Button
                   onClick={() => {
-                    // Validate required fields
-                    if (!completionCaseData.modelNumber || !completionCaseData.serialNumber || !completionCaseData.purchasePlace || !completionCaseData.repairNeeded) {
-                      toast({
-                        title: "Missing Information",
-                        description: "Please fill all required case fields (Model, Serial, Store, Repair)",
-                        variant: "destructive",
-                      });
-                      return;
-                    }
-
                     if (completionSerialError) {
                       toast({
                         title: "Duplicate Serial Number",
@@ -2726,8 +2828,7 @@ export default function DashboardPage() {
                       return;
                     }
 
-                    completeQuickCaseMutation.mutate({
-                      id: selectedQuickCase._id,
+                    const completionData = {
                       customerInfo: {
                         name: completionCustomerData.name,
                         email: completionCustomerData.email,
@@ -2745,7 +2846,9 @@ export default function DashboardPage() {
                         repairNeeded: completionCaseData.repairNeeded,
                         initialSummary: completionCaseData.initialSummary || 'Completed from Quick Case',
                       },
-                    });
+                    };
+                    setPendingQuickCaseCompletionData(completionData);
+                    setShowQuickCaseEmailConfirm(true);
                   }}
                   disabled={completeQuickCaseMutation.isPending || isCheckingCompletionSerial || !!completionSerialError}
                   className="flex-1 bg-green-600 hover:bg-green-700"
@@ -2757,6 +2860,38 @@ export default function DashboardPage() {
           )}
         </DialogContent>
       </Dialog >
+
+      {/* Email Confirmation Dialog for Create Case */}
+      <AlertDialog open={showCreateCaseEmailConfirm} onOpenChange={setShowCreateCaseEmailConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send Email Notification?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Do you want to send a "Case Created" email to the customer?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => handleCreateCaseConfirm(false)}>No, Don't Send</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleCreateCaseConfirm(true)}>Yes, Send Email</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Email Confirmation Dialog for Quick Case Completion */}
+      <AlertDialog open={showQuickCaseEmailConfirm} onOpenChange={setShowQuickCaseEmailConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send Email Notification?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Do you want to send a "Case Created" email to the customer?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => handleQuickCaseCompletionConfirm(false)}>No, Don't Send</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleQuickCaseCompletionConfirm(true)}>Yes, Send Email</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Create Customer Dialog */}
       < Dialog open={isCreateCustomerOpen} onOpenChange={setIsCreateCustomerOpen} >

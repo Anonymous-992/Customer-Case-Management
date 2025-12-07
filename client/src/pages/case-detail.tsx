@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -24,7 +24,7 @@ import {
   type UpdateProductCase,
   insertProductCaseSchema
 } from "@shared/schema";
-import { Trash2, Calendar, DollarSign, Package, Wrench, Link as LinkIcon, Download } from "lucide-react";
+import { Trash2, Calendar, DollarSign, Package, Wrench, Link as LinkIcon, Download, Clock, AlertCircle } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useSettings } from "@/lib/settings-context";
@@ -51,6 +51,10 @@ export default function CaseDetailPage() {
   const [statusUpdateData, setStatusUpdateData] = useState<any>(null);
   const { admin } = useAuth();
   const { toast } = useToast();
+
+  // Serial check state for editing
+  const [serialError, setSerialError] = useState("");
+  const [isCheckingSerial, setIsCheckingSerial] = useState(false);
 
   const [showShipmentDialog, setShowShipmentDialog] = useState(false);
   const [shipmentForm, setShipmentForm] = useState({
@@ -127,9 +131,30 @@ export default function CaseDetailPage() {
       setIsEditing(false);
     },
     onError: (error: Error) => {
+      let message = error.message || "Failed to update case";
+
+      // Try to unwrap API error messages of the form "400: {\"message\":...}"
+      try {
+        const match = message.match(/^\d+:\s*(.*)$/);
+        if (match) {
+          const parsed = JSON.parse(match[1]);
+          if (parsed && typeof parsed.message === "string") {
+            message = parsed.message;
+          }
+        }
+      } catch {
+        // Ignore JSON parse errors and fall back to the original message
+      }
+
+      if (message.includes("Serial number already exists")) {
+        setSerialError(message);
+        // For serial validation errors, show only inline error and do not show a toast
+        return;
+      }
+
       toast({
         title: "Error",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     },
@@ -143,6 +168,7 @@ export default function CaseDetailPage() {
       if (caseData?.customer._id) {
         queryClient.invalidateQueries({ queryKey: ['/api/customers', caseData.customer._id] });
       }
+      queryClient.invalidateQueries({ queryKey: ['/api/cases'] });
       toast({
         title: "Success",
         description: "Case deleted successfully",
@@ -162,8 +188,44 @@ export default function CaseDetailPage() {
     addNoteMutation.mutate(data.message);
   };
 
+  // Effect to check serial number on edit
+  useEffect(() => {
+    const currentSerial = watchEdit("serialNumber");
+
+    // Skip if empty or same as original
+    if (!currentSerial || !currentSerial.trim() || currentSerial === caseData?.serialNumber) {
+      setSerialError("");
+      setIsCheckingSerial(false);
+      return;
+    }
+
+    setIsCheckingSerial(true);
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        const data: any = await apiRequest("GET", `/api/cases/check-serial?serialNumber=${encodeURIComponent(currentSerial)}&excludeId=${id}`);
+        if (data.exists) {
+          setSerialError(data.message || "Serial number already exists");
+        } else {
+          setSerialError("");
+        }
+      } catch (error) {
+        console.error("Failed to check serial:", error);
+      } finally {
+        setIsCheckingSerial(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [watchEdit("serialNumber"), caseData, id]);
+
   const onSubmitEdit = async (data: any) => {
     if (!caseData) return;
+
+    // If there is a serial validation error, block submit (inline error already shown)
+    if (serialError) {
+      return;
+    }
 
     // Track changes for interaction history (excluding status and paymentStatus as backend handles those)
     const changes: string[] = [];
@@ -644,7 +706,7 @@ export default function CaseDetailPage() {
               </Button>
               <Button
                 onClick={handleSubmitEdit(onSubmitEdit)}
-                disabled={updateCaseMutation.isPending}
+                disabled={updateCaseMutation.isPending || isCheckingSerial || !!serialError}
                 data-testid="button-save-edit"
               >
                 {updateCaseMutation.isPending ? "Saving..." : "Save Changes"}
@@ -712,7 +774,20 @@ export default function CaseDetailPage() {
                       <Input
                         value={watchEdit("serialNumber") || ""}
                         onChange={(e) => setEditValue("serialNumber", e.target.value)}
+                        className={serialError ? "border-destructive" : ""}
                       />
+                      {isCheckingSerial && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3 animate-spin" />
+                          Checking serial...
+                        </p>
+                      )}
+                      {!isCheckingSerial && serialError && (
+                        <p className="text-xs text-destructive flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {serialError}
+                        </p>
+                      )}
                     </div>
                   </div>
 

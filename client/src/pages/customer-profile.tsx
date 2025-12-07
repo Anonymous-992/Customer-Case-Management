@@ -49,6 +49,11 @@ export default function CustomerProfilePage() {
   const [editPhoneError, setEditPhoneError] = useState<string>("");
   const [isCheckingEditPhone, setIsCheckingEditPhone] = useState(false);
   const [activeTab, setActiveTab] = useState("info");
+
+  // Email confirmation state
+  const [showEmailConfirm, setShowEmailConfirm] = useState(false);
+  const [pendingCaseData, setPendingCaseData] = useState<InsertProductCase | null>(null);
+
   const { toast } = useToast();
 
   const { data: customer, isLoading } = useQuery<CustomerWithCases>({
@@ -172,6 +177,7 @@ export default function CustomerProfilePage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/customers', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/cases'] });
 
       // Trigger confetti celebration
       confetti({
@@ -303,7 +309,17 @@ export default function CustomerProfilePage() {
       });
       return;
     }
-    createCaseMutation.mutate(data);
+
+    setPendingCaseData(data);
+    setShowEmailConfirm(true);
+  };
+
+  const handleConfirm = (sendEmail: boolean) => {
+    if (pendingCaseData) {
+      createCaseMutation.mutate({ ...pendingCaseData, sendNotification: sendEmail } as any);
+      setShowEmailConfirm(false);
+      setPendingCaseData(null);
+    }
   };
 
   if (isLoading) {
@@ -915,6 +931,21 @@ export default function CustomerProfilePage() {
             >
               Delete
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showEmailConfirm} onOpenChange={setShowEmailConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send Email Notification?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Do you want to send a "Case Created" email to the customer?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => handleConfirm(false)}>No, Don't Send</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleConfirm(true)}>Yes, Send Email</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

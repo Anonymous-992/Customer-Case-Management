@@ -659,21 +659,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Send email notification to customer about new case
+      // Send email notification to customer about new case (conditionally)
       try {
-        const customer = isMongoDBAvailable
-          ? await Customer.findById(customerId)
-          : await memoryStorage.findCustomerById(customerId);
+        if (req.body.sendNotification !== false) {
+          const customer = isMongoDBAvailable
+            ? await Customer.findById(customerId)
+            : await memoryStorage.findCustomerById(customerId);
 
-        if (customer && customer.notificationPreferences?.email) {
-          await notificationService.sendCaseCreatedEmail(
-            customer.email,
-            customer.name,
-            modelNumber || '',
-            serialNumber || '',
-            status || 'New Case',
-            productCase._id.toString()
-          );
+          if (customer && customer.notificationPreferences?.email) {
+            await notificationService.sendCaseCreatedEmail(
+              customer.email,
+              customer.name,
+              modelNumber || '',
+              serialNumber || '',
+              status || 'New Case',
+              productCase._id.toString()
+            );
+          }
         }
       } catch (emailError) {
         console.error('Failed to send case creation email:', emailError);
@@ -681,6 +683,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.status(201).json(productCase);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Check if a serial number exists (for validation during edit)
+  app.get("/api/cases/check-serial", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { serialNumber, excludeId } = req.query;
+
+      if (!serialNumber || typeof serialNumber !== 'string') {
+        return res.json({ exists: false });
+      }
+
+      // Skip check for empty or whitespace-only serials
+      if (!serialNumber.trim()) {
+        return res.json({ exists: false });
+      }
+
+      let existingCase;
+      if (isMongoDBAvailable) {
+        const query: any = { serialNumber };
+        if (excludeId && typeof excludeId === 'string') {
+          const trimmed = excludeId.trim();
+          // Only apply excludeId filter if it looks like a valid MongoDB ObjectId
+          if (/^[0-9a-fA-F]{24}$/.test(trimmed)) {
+            query._id = { $ne: trimmed };
+          }
+        }
+        existingCase = await ProductCase.findOne(query);
+      } else {
+        existingCase = await memoryStorage.findCaseBySerialNumber(serialNumber);
+        // Manual filter for memory storage
+        if (existingCase && excludeId && typeof excludeId === 'string' && existingCase._id === excludeId) {
+          existingCase = null;
+        }
+      }
+
+      if (existingCase) {
+        return res.json({
+          exists: true,
+          message: `Serial number already exists for product: ${existingCase.modelNumber}`
+        });
+      }
+
+      res.json({ exists: false });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -905,9 +953,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/cases/:id", authenticateToken, async (req: AuthRequest, res) => {
     try {
+      const { id } = req.params;
+
+      // If serial number is being updated, check for duplicates (exclude current case)
+      if (req.body.serialNumber && typeof req.body.serialNumber === 'string' && req.body.serialNumber.trim() !== '') {
+        const newSerial = req.body.serialNumber.trim();
+
+        let duplicateCase: any = null;
+        if (isMongoDBAvailable) {
+          duplicateCase = await ProductCase.findOne({
+            serialNumber: newSerial,
+            _id: { $ne: id },
+          });
+        } else {
+          const found = await memoryStorage.findCaseBySerialNumber(newSerial);
+          if (found && found._id !== id) {
+            duplicateCase = found;
+          }
+        }
+
+        if (duplicateCase) {
+          return res.status(400).json({
+            message: `Serial number already exists for product: ${duplicateCase.modelNumber}`,
+          });
+        }
+      }
+
       const existingCase = isMongoDBAvailable
-        ? await ProductCase.findById(req.params.id)
-        : await memoryStorage.findCaseById(req.params.id);
+        ? await ProductCase.findById(id)
+        : await memoryStorage.findCaseById(id);
 
       if (!existingCase) {
         return res.status(404).json({ message: "Case not found" });
@@ -963,8 +1037,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const productCase = isMongoDBAvailable
-        ? await ProductCase.findByIdAndUpdate(req.params.id, updates, { new: true })
-        : await memoryStorage.updateCase(req.params.id, updates);
+        ? await ProductCase.findByIdAndUpdate(id, updates, { new: true })
+        : await memoryStorage.updateCase(id, updates);
 
       // Only create interaction for status change (detailed changes are logged by frontend)
       if (req.body.status && req.body.status !== oldStatus) {
@@ -1213,13 +1287,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isMongoDBAvailable) {
         productCase = new ProductCase({
           customerId: customer._id,
-          modelNumber: caseInfo.modelNumber,
-          serialNumber: caseInfo.serialNumber,
-          purchasePlace: caseInfo.purchasePlace,
-          dateOfPurchase: caseInfo.dateOfPurchase ? new Date(caseInfo.dateOfPurchase) : new Date(),
-          receiptNumber: caseInfo.receiptNumber || 'N/A',
+          modelNumber: caseInfo.modelNumber || '',
+          serialNumber: caseInfo.serialNumber || '',
+          purchasePlace: caseInfo.purchasePlace || '',
+          dateOfPurchase: caseInfo.dateOfPurchase ? new Date(caseInfo.dateOfPurchase) : undefined,
+          receiptNumber: caseInfo.receiptNumber || '',
           status: caseInfo.status || 'New Case',
-          repairNeeded: caseInfo.repairNeeded || 'To be determined',
+          repairNeeded: caseInfo.repairNeeded || '',
           paymentStatus: caseInfo.paymentStatus || 'Pending',
           shippingCost: caseInfo.shippingCost || 0,
           initialSummary: caseInfo.initialSummary || quickCase.notes || 'Completed from Quick Case',
@@ -1248,13 +1322,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         productCase = await memoryStorage.createCase({
           customerId: customer._id,
-          modelNumber: caseInfo.modelNumber,
-          serialNumber: caseInfo.serialNumber,
-          purchasePlace: caseInfo.purchasePlace,
-          dateOfPurchase: caseInfo.dateOfPurchase ? new Date(caseInfo.dateOfPurchase) : new Date(),
-          receiptNumber: caseInfo.receiptNumber || 'N/A',
+          modelNumber: caseInfo.modelNumber || '',
+          serialNumber: caseInfo.serialNumber || '',
+          purchasePlace: caseInfo.purchasePlace || '',
+          dateOfPurchase: caseInfo.dateOfPurchase ? new Date(caseInfo.dateOfPurchase) : undefined,
+          receiptNumber: caseInfo.receiptNumber || '',
           status: caseInfo.status || 'New Case',
-          repairNeeded: caseInfo.repairNeeded || 'To be determined',
+          repairNeeded: caseInfo.repairNeeded || '',
           paymentStatus: caseInfo.paymentStatus || 'Pending',
           shippingCost: caseInfo.shippingCost || 0,
           initialSummary: caseInfo.initialSummary || quickCase.notes || 'Completed from Quick Case',
@@ -1279,20 +1353,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await memoryStorage.updateQuickCase(req.params.id, { status: 'completed' });
       }
 
-      // Send email notification to customer if enabled
+      // Send email notification if requested
       try {
-        if (customer.notificationPreferences?.email) {
-          await notificationService.sendCaseCreatedEmail(
-            customer.email,
-            customer.name,
-            productCase.modelNumber,
-            productCase.serialNumber,
-            productCase.status,
-            productCase._id.toString()
-          );
+        if (req.body.sendNotification === true) {
+          if (customer && customer.notificationPreferences?.email) {
+            await notificationService.sendCaseCreatedEmail(
+              customer.email,
+              customer.name,
+              productCase.modelNumber || '',
+              productCase.serialNumber || '',
+              productCase.status,
+              productCase._id.toString()
+            );
+          }
         }
       } catch (emailError) {
-        console.error('Failed to send email notification:', emailError);
+        console.error('Failed to send case creation email:', emailError);
       }
 
       res.status(201).json({ case: productCase, customer, quickCase });
