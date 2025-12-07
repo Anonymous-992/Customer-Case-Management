@@ -89,7 +89,7 @@ class MemoryStorage {
 
   async createCustomer(data: any) {
     const id = `customer-${Date.now()}`;
-    const customerId = `CUST-${String(this.customerIdCounter++).padStart(4, '0')}`;
+    const customerId = data.customerId || `CUST-${String(this.customerIdCounter++).padStart(4, '0')}`;
     const customer = {
       _id: id,
       customerId,

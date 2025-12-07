@@ -364,127 +364,202 @@ export default function CaseDetailPage() {
   };
 
   // Export case details to PDF
-  const handleExportCaseDetailPDF = () => {
+  const handleExportCaseDetailPDF = async () => {
     if (!caseData) return;
 
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 14;
 
-    // Title
-    doc.setFontSize(18);
-    doc.setFont("helvetica", "bold");
-    doc.text("Case Details Report", pageWidth / 2, 20, { align: "center" });
+      // --- Header ---
+      doc.setFillColor(140, 185, 174); // #8CB9AE
+      doc.rect(0, 0, pageWidth, 40, "F");
 
-    // Case ID
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Case ID: ${caseData._id}`, 14, 35);
+      // Add Logo
+      try {
+        const logoUrl = "/logo.png";
+        const img = new Image();
+        img.src = logoUrl;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
 
-    // Customer Information
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.text("Customer Information", 14, 50);
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "normal");
-    const customerInfo = [
-      ["Name", caseData.customer.name],
-      ["Phone", caseData.customer.phone],
-      ["Email", caseData.customer.email || "N/A"],
-      ["Address", caseData.customer.address || "N/A"],
-    ];
-    autoTable(doc, {
-      startY: 55,
-      head: [],
-      body: customerInfo,
-      theme: "plain",
-      styles: { fontSize: 10 },
-      columnStyles: { 0: { fontStyle: "bold", cellWidth: 40 } },
-    });
+        // Calculate aspect ratio to fit within 30px height max
+        const maxHeight = 30;
+        const ratio = maxHeight / img.height;
+        const width = img.width * ratio;
 
-    // Case Information
-    let currentY = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.text("Case Information", 14, currentY);
-    currentY += 5;
-
-    const caseInfo = [
-      ["Model Number", caseData.modelNumber],
-      ["Serial Number", caseData.serialNumber],
-      ["Status", caseData.status],
-      ["Payment Status", caseData.paymentStatus],
-      ["Store", caseData.purchasePlace || "N/A"],
-      ["Date of Purchase", formatDate(caseData.dateOfPurchase)],
-      ["Receipt Number", caseData.receiptNumber || "N/A"],
-      ["Repair Needed", caseData.repairNeeded || "N/A"],
-      ["Shipping Cost", `$${caseData.shippingCost || 0}`],
-      ["Created", formatDateTime(caseData.createdAt)],
-      ["Last Updated", formatDateTime(caseData.updatedAt)],
-    ];
-    autoTable(doc, {
-      startY: currentY,
-      head: [],
-      body: caseInfo,
-      theme: "striped",
-      styles: { fontSize: 10 },
-      columnStyles: { 0: { fontStyle: "bold", cellWidth: 50 } },
-    });
-
-    // Initial Summary
-    if (caseData.initialSummary) {
-      currentY = (doc as any).lastAutoTable.finalY + 10;
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      doc.text("Initial Summary", 14, currentY);
-      currentY += 7;
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      const splitSummary = doc.splitTextToSize(caseData.initialSummary, pageWidth - 28);
-      doc.text(splitSummary, 14, currentY);
-    }
-
-    // Shipment Information
-    if (caseData.status === 'Shipped to Customer' || caseData.carrierCompany || caseData.trackingNumber) {
-      currentY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 20 : currentY + 20;
-
-      // Check if we need a new page
-      if (currentY > doc.internal.pageSize.getHeight() - 40) {
-        doc.addPage();
-        currentY = 20;
+        doc.addImage(img, "PNG", margin, 5, width, maxHeight);
+      } catch (e) {
+        console.error("Failed to load logo for PDF", e);
       }
 
-      doc.setFontSize(14);
+      // Header Text (Right Aligned)
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(20);
       doc.setFont("helvetica", "bold");
-      doc.text("Shipment Information", 14, currentY);
-      currentY += 5;
+      doc.text("CASE DETAILS REPORT", pageWidth - margin, 18, { align: "right" });
 
-      const shipmentInfo = [
-        ["Carrier", caseData.carrierCompany || "N/A"],
-        ["Tracking Number", caseData.trackingNumber || "N/A"],
-        ["Date of Shipping", caseData.shippedDate ? format(new Date(caseData.shippedDate), 'MMM dd, yyyy') : "N/A"],
-        ["Shipping Amount", `$${(caseData.shippingCost || 0).toFixed(2)}`],
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Generated: ${formatDateTime(new Date())}`, pageWidth - margin, 28, { align: "right" });
+
+      // --- Case Overview Section ---
+      let currentY = 50;
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Case ID: ${caseData._id}`, margin, currentY);
+
+      currentY += 8;
+
+      // Use autoTable columns to fit Customer and Case info side by side if possible? 
+      // Providing a compact single page view often requires utilizing the width better.
+      // We'll try to put Customer Info on Left, Case Info High-Level on Right?
+      // Or just reduce padding/spacing significantly.
+
+      // 1. Customer Details Table
+      doc.setFontSize(11); // Slightly smaller
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(30, 41, 59);
+      doc.text("Customer Information", margin, currentY);
+
+      autoTable(doc, {
+        startY: currentY + 2,
+        body: [
+          ["Name", caseData.customer.name],
+          ["Phone", caseData.customer.phone || "-"],
+          ["Email", caseData.customer.email || "-"],
+          ["Address", caseData.customer.address || "-"],
+          ["Customer ID", caseData.customer.customerId],
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [71, 85, 105], textColor: 255, fontStyle: 'bold' },
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 40, fillColor: [241, 245, 249] },
+          1: { cellWidth: 'auto' }
+        },
+        styles: { cellPadding: 2, fontSize: 9, valign: 'middle', lineColor: [203, 213, 225] }, // Compressed padding/font
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+
+      // 2. Case Details Table
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(30, 41, 59);
+      doc.text("Case Information", margin, currentY);
+
+      const caseInfoBody = [
+        ["Model Number", caseData.modelNumber || "-"],
+        ["Serial Number", caseData.serialNumber || "-"],
+        ["Status", caseData.status],
+        ["Payment Status", caseData.paymentStatus],
+        ["Purchase Place", caseData.purchasePlace || "-"],
+        ["Date of Purchase", formatDate(caseData.dateOfPurchase)],
+        ["Receipt Number", caseData.receiptNumber || "-"],
+        ["Repair Needed", caseData.repairNeeded || "-"],
+        ["Shipping Cost", `$${caseData.shippingCost || 0}`],
+        ["Created Date", formatDateTime(caseData.createdAt)],
+        ["Last Updated", formatDateTime(caseData.updatedAt)],
       ];
 
       autoTable(doc, {
-        startY: currentY,
-        head: [],
-        body: shipmentInfo,
-        theme: "grid",
-        styles: { fontSize: 10 },
-        columnStyles: { 0: { fontStyle: "bold", cellWidth: 50 } },
+        startY: currentY + 2,
+        body: caseInfoBody,
+        theme: 'grid',
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 40, fillColor: [241, 245, 249] },
+          1: { cellWidth: 'auto' }
+        },
+        styles: { cellPadding: 2, fontSize: 9, valign: 'middle', lineColor: [203, 213, 225] },
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+
+      // 3. Initial Summary (Full Width Box)
+      if (caseData.initialSummary) {
+        // Check page break with more tolerance
+        if (currentY + 25 > pageHeight) {
+          doc.addPage();
+          currentY = 20;
+        }
+
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text("Initial Summary", margin, currentY);
+
+        autoTable(doc, {
+          startY: currentY + 2,
+          body: [[caseData.initialSummary]],
+          theme: 'grid',
+          styles: {
+            cellPadding: 4,
+            fontSize: 9,
+            fontStyle: 'italic',
+            textColor: [51, 65, 85],
+            lineColor: [203, 213, 225]
+          },
+          columnStyles: { 0: { cellWidth: 'auto' } }
+        });
+        currentY = (doc as any).lastAutoTable.finalY + 10;
+      }
+
+      // 4. Shipment Info (if applicable)
+      if (caseData.status === 'Shipped to Customer' || caseData.carrierCompany || caseData.trackingNumber) {
+        if (currentY + 30 > pageHeight) {
+          doc.addPage();
+          currentY = 20;
+        }
+
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text("Shipment Information", margin, currentY);
+
+        autoTable(doc, {
+          startY: currentY + 2,
+          body: [
+            ["Carrier", caseData.carrierCompany || "-"],
+            ["Tracking Number", caseData.trackingNumber || "-"],
+            ["Date of Shipping", caseData.shippedDate ? format(new Date(caseData.shippedDate), 'MMM dd, yyyy') : "-"],
+            ["Shipping Cost", `$${(caseData.shippingCost || 0).toFixed(2)}`],
+          ],
+          theme: 'grid',
+          columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 40, fillColor: [241, 245, 249] },
+            1: { cellWidth: 'auto' }
+          },
+          styles: { cellPadding: 2, fontSize: 9, valign: 'middle', lineColor: [203, 213, 225] },
+        });
+      }
+
+      // Footer with Page Numbers
+      const totalPages = (doc as any).internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: "center" });
+      }
+
+      doc.save(`Case_Report_${caseData.modelNumber || caseData._id}.pdf`);
+
+      toast({
+        title: "Success",
+        description: "Case details exported to PDF",
+      });
+    } catch (error) {
+      console.error("Export failed", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate PDF",
+        variant: "destructive"
       });
     }
-
-    // Interaction History removed from PDF export to prevent text overlapping
-    // The full interaction history can be viewed on the case detail page
-
-    // Save PDF
-    doc.save(`case-${caseData._id}-${new Date().toISOString().split('T')[0]}.pdf`);
-
-    toast({
-      title: "Success",
-      description: "Case details exported to PDF",
-    });
   };
 
   if (isLoading) {

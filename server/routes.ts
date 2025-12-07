@@ -13,6 +13,30 @@ import { isMongoDBAvailable } from "./db";
 import { memoryStorage } from "./storage/memory-storage";
 import * as notificationService from "./services/notification.service";
 
+// Helper function to generate unique customer ID
+async function generateUniqueCustomerId(): Promise<string> {
+  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+  while (true) {
+    let randomStr = '';
+    for (let i = 0; i < 6; i++) {
+      randomStr += charset.charAt(Math.floor(Math.random() * charset.length));
+    }
+    const customerId = `CUST-${randomStr}`;
+
+    let exists = false;
+    if (isMongoDBAvailable) {
+      const existing = await Customer.findOne({ customerId });
+      if (existing) exists = true;
+    } else {
+      const customers = await memoryStorage.findAllCustomers();
+      if (customers.find(c => c.customerId === customerId)) exists = true;
+    }
+
+    if (!exists) return customerId;
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // ===== AUTH ROUTES =====
   app.post("/api/auth/login", async (req, res) => {
@@ -276,9 +300,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       let customer;
+      const customerId = await generateUniqueCustomerId();
+
       if (isMongoDBAvailable) {
-        const count = await Customer.countDocuments();
-        const customerId = `CUST-${String(count + 1001).padStart(4, '0')}`;
 
         customer = new Customer({
           customerId,
@@ -302,6 +326,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } else {
         customer = await memoryStorage.createCustomer({
+          customerId,
           name,
           phone,
           address,
@@ -806,12 +831,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update customer with full information
       if (customerInfo) {
+        let finalCustomerId = customerInfo.customerId;
+
+        // If no ID provided and current ID is pending, generate a new permanent ID
+        if (!finalCustomerId && customer.customerId.startsWith('PENDING-')) {
+          finalCustomerId = await generateUniqueCustomerId();
+        } else if (!finalCustomerId) {
+          finalCustomerId = customer.customerId;
+        }
+
         if (isMongoDBAvailable) {
           await Customer.findByIdAndUpdate(customer._id, {
             name: customerInfo.name,
             email: customerInfo.email,
             address: customerInfo.address,
-            customerId: customerInfo.customerId || customer.customerId.replace('PENDING-', 'CUST-'),
+            customerId: finalCustomerId,
           });
           customer = await Customer.findById(customer._id);
         } else {
@@ -819,7 +853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             name: customerInfo.name,
             email: customerInfo.email,
             address: customerInfo.address,
-            customerId: customerInfo.customerId || customer.customerId.replace('PENDING-', 'CUST-'),
+            customerId: finalCustomerId,
           });
           customer = await memoryStorage.findCustomerById(customer._id);
         }
@@ -1133,13 +1167,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!customer) {
         // Create new customer
+        const customerId = await generateUniqueCustomerId();
+
         if (isMongoDBAvailable) {
           customer = new Customer({
             name: customerInfo.name,
             phone: quickCase.phone,
             email: customerInfo.email,
             address: customerInfo.address,
-            customerId: `CUST-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+            customerId,
             createdBy: req.admin!._id,
             notificationPreferences: {
               email: true,
@@ -1149,6 +1185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await customer.save();
         } else {
           customer = await memoryStorage.createCustomer({
+            customerId,
             name: customerInfo.name,
             phone: quickCase.phone,
             email: customerInfo.email,
