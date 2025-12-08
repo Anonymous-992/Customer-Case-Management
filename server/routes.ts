@@ -12,6 +12,43 @@ import { authenticateToken, requireSuperAdmin, generateToken, type AuthRequest }
 import { isMongoDBAvailable } from "./db";
 import { memoryStorage } from "./storage/memory-storage";
 import * as notificationService from "./services/notification.service";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import express from "express";
+
+// Configure storage for avatar uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(process.cwd(), 'client', 'public', 'uploads');
+    // Ensure directory exists
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Generate unique filename
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'avatar-' + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
+
 
 // Helper function to generate unique customer ID
 async function generateUniqueCustomerId(): Promise<string> {
@@ -38,7 +75,25 @@ async function generateUniqueCustomerId(): Promise<string> {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Serve uploaded files statically (in case direct access via client/public doesn't work in some setups, though Vite usually handles it. 
+  // But strictly speaking, for production express serving:
+  app.use('/uploads', express.static(path.join(process.cwd(), 'client', 'public', 'uploads')));
+
   // ===== AUTH ROUTES =====
+  app.post("/api/upload", authenticateToken, upload.single('file'), (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: "No file uploaded" });
+      }
+
+      // Return the relative URL path
+      const fileUrl = `/uploads/${req.file.filename}`;
+      res.json({ success: true, url: fileUrl });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { username, password } = req.body;
@@ -91,6 +146,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const admin = isMongoDBAvailable
         ? await Admin.findByIdAndUpdate(req.admin!._id, updates, { new: true }).select('-password')
         : await memoryStorage.updateAdmin(req.admin!._id, updates);
+
+      // If avatar was updated, update all interaction history records for this admin
+      if (avatar !== undefined && isMongoDBAvailable) {
+        await InteractionHistory.updateMany(
+          { adminId: req.admin!._id },
+          { $set: { adminAvatar: avatar } }
+        );
+      }
 
       res.json({
         success: true,

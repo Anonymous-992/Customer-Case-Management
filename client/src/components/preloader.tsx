@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileText, Package, Users, Settings } from "lucide-react";
+
 
 export function Preloader() {
   const [isLoading, setIsLoading] = useState(true);
@@ -36,49 +36,20 @@ export function Preloader() {
       <div className="relative text-center space-y-8 px-4">
         {/* Logo/Icon Section */}
         <div className="relative inline-block">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 blur-2xl opacity-50 animate-pulse" />
-          <div className="relative bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-2xl border border-gray-200 dark:border-gray-700">
-            {/* Rotating Icons */}
-            <div className="relative w-24 h-24 mx-auto">
-              {/* Center Icon */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <FileText className="w-8 h-8 text-white" />
-                </div>
-              </div>
-              
-              {/* Orbiting Icons */}
-              <div className="absolute inset-0 animate-spin-slow">
-                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-2">
-                  <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center shadow-md">
-                    <Package className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="absolute inset-0 animate-spin-slow-reverse">
-                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-2">
-                  <div className="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center shadow-md">
-                    <Users className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="absolute inset-0 animate-spin-slower">
-                <div className="absolute top-1/2 right-0 transform translate-x-2 -translate-y-1/2">
-                  <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center shadow-md">
-                    <Settings className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 blur-3xl opacity-20 animate-pulse" />
+          <div className="relative bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-full p-8 shadow-2xl border border-white/20 dark:border-gray-700/50">
+            <img
+              src="/logo.png"
+              alt="AKITO Logo"
+              className="w-32 h-32 object-contain animate-bounce"
+            />
           </div>
         </div>
 
         {/* Title */}
         <div className="space-y-2">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Case Management System
+            AKITO Case Management system
           </h1>
           <p className="text-gray-600 dark:text-gray-400 text-lg font-medium">
             Loading your workspace...
