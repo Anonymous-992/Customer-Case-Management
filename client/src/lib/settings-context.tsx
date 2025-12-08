@@ -23,21 +23,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Format date according to user's preference
   const formatDate = (date: Date | string, customFormat?: string) => {
     if (!date) return "";
-    
+
     const dateObj = typeof date === "string" ? parseISO(date) : date;
     const timezone = settings?.preferences.timezone || "UTC";
     const dateFormat = customFormat || settings?.preferences.dateFormat || "DD/MM/YYYY";
-    
+
     // Convert to user's timezone
     const zonedDate = toZonedTime(dateObj, timezone);
-    
+
     // Map our format strings to date-fns format strings
     const formatMap: Record<string, string> = {
       "DD/MM/YYYY": "dd/MM/yyyy",
       "MM/DD/YYYY": "MM/dd/yyyy",
       "YYYY-MM-DD": "yyyy-MM-dd",
     };
-    
+
     const fnsFormat = formatMap[dateFormat] || "dd/MM/yyyy";
     return formatDateFns(zonedDate, fnsFormat);
   };
@@ -45,19 +45,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Format date and time according to user's preference
   const formatDateTime = (date: Date | string) => {
     if (!date) return "";
-    
+
     const dateObj = typeof date === "string" ? parseISO(date) : date;
     const timezone = settings?.preferences.timezone || "UTC";
     const dateFormat = settings?.preferences.dateFormat || "DD/MM/YYYY";
-    
+
     const zonedDate = toZonedTime(dateObj, timezone);
-    
+
     const formatMap: Record<string, string> = {
       "DD/MM/YYYY": "dd/MM/yyyy HH:mm",
       "MM/DD/YYYY": "MM/dd/yyyy hh:mm a",
       "YYYY-MM-DD": "yyyy-MM-dd HH:mm",
     };
-    
+
     const fnsFormat = formatMap[dateFormat] || "dd/MM/yyyy HH:mm";
     return formatDateFns(zonedDate, fnsFormat);
   };
@@ -65,10 +65,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // Basic translation function (can be expanded with actual i18n library)
   const t = (key: string): string => {
     const language = settings?.preferences.language || "en";
-    
+
     // Translation dictionary
     const translations: Record<string, Record<string, string>> = {
       en: {
+        // Navigation & Main Menu
         dashboard: "Dashboard",
         customers: "Customers",
         reminders: "Reminders",
@@ -78,64 +79,39 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         profile: "Profile",
         logout: "Logout",
         welcome: "Welcome",
+        menu: "Menu",
+
+        // Dashboard Stats
         "open_cases": "Open Cases",
         "pending_cases": "Pending Cases",
         "closed_cases": "Closed Cases",
         "total_customers": "Total Customers",
+
+        // Case Related
         "case_id": "Case ID",
-        status: "Status",
-        "created_at": "Created",
-        store: "Store",
-        actions: "Actions",
-        "export_excel": "Export to Excel",
-        "export_pdf": "Export to PDF",
-        "no_data": "No data available",
+        "case_details": "Case Details",
+        "case_status": "Case Status",
         "create_case": "Create Case",
+        "create_new_case": "Create New Case",
         "quick_case": "Quick Case",
         "all_cases": "All Cases",
         "by_store": "by Store",
-        "missing_info": "Missing Information",
-        "expand": "Expand",
-        "collapse": "Collapse",
-        "click_to": "Click to",
-        "add_customer": "Add Customer",
-        "phone_number": "Phone Number",
-        "email_address": "Email Address",
-        "address": "Address",
-        "cancel": "Cancel",
-        "save": "Save",
-        "create": "Create",
-        "edit": "Edit",
-        "delete": "Delete",
-        "search": "Search",
-        "export": "Export",
-        "import": "Import",
-        "filter": "Filter",
-        "all": "All",
-        "new": "New",
-        "pending": "Pending",
-        "completed": "Completed",
-        "in_progress": "In Progress",
-        "cancelled": "Cancelled",
-        "high": "High",
-        "medium": "Medium",
-        "low": "Low",
-        "urgent": "Urgent",
-        priority: "Priority",
-        "title": "Title",
-        "description": "Description",
-        "due_date": "Due Date",
-        "created": "Created",
-        "updated": "Updated",
-        "assigned_by": "Assigned By",
-        "assigned_to": "Assigned To",
-        "no_results": "No results found",
-        "search_placeholder": "Search...",
-        "select_customer": "Select Customer",
-        "create_new_case": "Create New Case",
-        "case_details": "Case Details",
+        "new_case": "New Case",
+        "quick_cases": "Quick Cases",
+        "store_wise_cases": "Store-wise Cases",
+
+        // Customer Related
         "customer_info": "Customer Information",
         "customer_name": "Customer Name",
+        "add_customer": "Add Customer",
+        "add_new_customer": "Add New Customer",
+        "create_customer_profile": "Create a new customer profile",
+        "select_customer": "Select Customer",
+        "no_customers": "No customers yet",
+        "create_one_start": "Create one to get started",
+        "customer_id": "Customer ID",
+
+        // Product & Case Details
         "serial_number": "Serial Number",
         "model_number": "Model Number",
         "purchase_place": "Purchase Place",
@@ -143,12 +119,111 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         "date_of_purchase": "Date of Purchase",
         "repair_needed": "Repair Needed",
         "initial_summary": "Initial Summary",
-        "case_status": "Case Status",
+
+        // Status & Payment
+        status: "Status",
         "payment_status": "Payment Status",
         "shipping_cost": "Shipping Cost",
+        "new": "New",
+        "pending": "Pending",
+        "completed": "Completed",
+        "in_progress": "In Progress",
+        "cancelled": "Cancelled",
+        "closed": "Closed",
+
+        // Priority
+        priority: "Priority",
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low",
+        "urgent": "Urgent",
+
+        // Contact Info
+        "phone_number": "Phone Number",
+        "email_address": "Email Address",
+        "address": "Address",
+
+        // Common Actions
+        "save": "Save",
         "save_changes": "Save Changes",
+        "cancel": "Cancel",
+        "create": "Create",
+        "edit": "Edit",
+        "delete": "Delete",
+        "search": "Search",
+        "export": "Export",
+        "import": "Import",
+        "filter": "Filter",
+        "view": "View",
+        "close": "Close",
+        "submit": "Submit",
+        "confirm": "Confirm",
+        "back": "Back",
+        "next": "Next",
+        "finish": "Finish",
+
+        // View Controls
+        "expand": "Expand",
+        "collapse": "Collapse",
+        "show_more": "Show More",
+        "show_less": "Show Less",
+        "click_to": "Click to",
+        "view_all": "View All",
+
+        // Export
+        "export_excel": "Export to Excel",
+        "export_pdf": "Export to PDF",
+        "export_settings": "Export Settings",
+        "configure_export": "Configure data export preferences",
+        "default_export_format": "Default Export Format",
+        "include_filters": "Include Current Filters",
+        "apply_active_filters": "Apply active filters when exporting",
+        "export_available": "Export Available For:",
+
+        // Lists
+        "cases_list": "Cases List",
+        "customers_list": "Customers List",
+        "reminders_list": "Reminders List",
+        "reports_analytics": "Reports & Analytics",
+
+        // Data & Messages
+        "no_data": "No data available",
+        "no_results": "No results found",
+        "loading": "Loading...",
         "creating": "Creating...",
         "saving": "Saving...",
+        "updating": "Updating...",
+        "deleting": "Deleting...",
+        "processing": "Processing...",
+
+        // Search & Filter
+        "search_placeholder": "Search...",
+        "search_by_name_email": "Search by name, email, phone, or Customer ID...",
+        "filter_by": "Filter by",
+        "all": "All",
+
+        // Dates & Time
+        "created": "Created",
+        "updated": "Updated",
+        "created_at": "Created",
+        "due_date": "Due Date",
+        "due": "Due",
+        "overdue": "OVERDUE",
+        "date_format": "Date Format",
+        "date_display": "How dates are displayed throughout the system",
+
+        // Form Fields
+        "title": "Title",
+        "description": "Description",
+        "optional": "Optional",
+        "required": "Required",
+
+        // Assignment
+        "assigned_by": "Assigned By",
+        "assigned_to": "Assigned To",
+        "assign_to": "Assign To",
+
+        // Authentication
         "sign_in": "Sign In",
         "signing_in": "Signing in...",
         "username": "Username",
@@ -157,6 +232,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         "enter_password": "Enter your password",
         "customer_case_management": "Customer Case Management",
         "sign_in_access": "Sign in to access the admin dashboard",
+
+        // Profile
         "profile_info": "Profile Information",
         "update_personal_info": "Update your personal information and credentials",
         "full_name": "Full Name",
@@ -167,37 +244,34 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         "min_6_chars": "Min 6 characters",
         "must_match": "Must match new password",
         "password_change_note": "Leave password fields blank if you don't want to change your password. Only fill them if you want to set a new password.",
+
+        // Errors & Notifications
         "page_not_found": "Page Not Found",
         "page_not_exist": "The page you're looking for doesn't exist or has been moved.",
         "go_back": "Go Back",
         "go_home": "Go Home",
-        "export_settings": "Export Settings",
-        "configure_export": "Configure data export preferences",
-        "default_export_format": "Default Export Format",
-        "include_filters": "Include Current Filters",
-        "apply_active_filters": "Apply active filters when exporting",
-        "export_available": "Export Available For:",
-        "cases_list": "Cases List",
-        "customers_list": "Customers List",
-        "reminders_list": "Reminders List",
-        "reports_analytics": "Reports & Analytics",
+        "error": "Error",
+        "success": "Success",
+        "warning": "Warning",
+        "info": "Info",
+
+        // Settings
         "language": "Language",
         "system_language": "System language (requires page reload)",
-        "date_format": "Date Format",
-        "date_display": "How dates are displayed throughout the system",
         "reset_defaults": "Reset to Defaults",
         "unsaved_changes": "Unsaved changes",
+        "preferences": "Preferences",
+
+        // Reminders
         "team_reminders": "Team Reminders",
         "new_reminder": "New Reminder",
+        "create_reminder": "Create Reminder",
         "create_team_reminder": "Create Team Reminder",
         "assign_task": "Assign a task or reminder to team members",
         "provide_details": "Provide details...",
-        "optional": "Optional",
-        "assign_to": "Assign To",
         "all_members": "All Members",
         "no_subadmins": "No subadmins available",
         "members_selected": "members selected",
-        "create_reminder": "Create Reminder",
         "no_reminders": "No Reminders Found",
         "create_reminder_start": "Create a reminder to get started",
         "no_reminders_assigned": "You have no reminders assigned",
@@ -208,10 +282,24 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         "mark_progress": "Mark In Progress",
         "mark_completed": "Mark Completed",
         "mark_cancelled": "Cancel",
-        "overdue": "OVERDUE",
         "from": "From",
         "to": "To",
-        "due": "Due",
+
+        // Additional UI Elements
+        store: "Store",
+        actions: "Actions",
+        "missing_info": "Missing Information",
+        "checking_phone": "Checking phone number...",
+        "checking_serial": "Checking serial number...",
+        "phone_exists": "Phone number already exists",
+        "serial_exists": "Serial number already exists",
+        "create_customer": "Create Customer",
+        "no_data_export": "No data to export",
+        "exported_successfully": "Exported successfully",
+        "send_notification": "Send Notification",
+        "notification_question": "Would you like to send an email notification?",
+        "yes_send": "Yes, Send",
+        "no_dont_send": "No, Don't Send",
       },
       "en-US": {
         dashboard: "Dashboard",
@@ -262,6 +350,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         loading: "Loading...",
       },
       ar: {
+        // القائمة الرئيسية
         dashboard: "لوحة القيادة",
         customers: "العملاء",
         reminders: "التذكيرات",
@@ -270,23 +359,228 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         settings: "الإعدادات",
         profile: "الملف الشخصي",
         logout: "تسجيل الخروج",
-        welcome: "مرحبا",
+        welcome: "مرحباً",
+        menu: "القائمة",
+
+        // إحصائيات لوحة القيادة
         "open_cases": "الحالات المفتوحة",
         "pending_cases": "الحالات المعلقة",
         "closed_cases": "الحالات المغلقة",
         "total_customers": "إجمالي العملاء",
+
+        // الحالات
         "case_id": "رقم الحالة",
+        "case_details": "تفاصيل الحالة",
+        "case_status": "حالة القضية",
+        "create_case": "إنشاء حالة",
+        "create_new_case": "إنشاء حالة جديدة",
+        "quick_case": "حالة سريعة",
+        "all_cases": "جميع الحالات",
+        "by_store": "حسب المتجر",
+        "new_case": "حالة جديدة",
+        "quick_cases": "حالات سريعة",
+        "store_wise_cases": "حالات حسب المتجر",
+
+        // العملاء
+        "customer_info": "معلومات العميل",
         "customer_name": "اسم العميل",
+        "add_customer": "إضافة عميل",
+        "add_new_customer": "إضافة عميل جديد",
+        "create_customer_profile": "إنشاء ملف تعريف عميل جديد",
+        "select_customer": "اختر العميل",
+        "no_customers": "لا يوجد عملاء بعد",
+        "create_one_start": "قم بإنشاء واحد للبدء",
+        "customer_id": "رقم العميل",
+
+        // تفاصيل المنتج والحالة
+        "serial_number": "الرقم التسلسلي",
+        "model_number": "رقم الموديل",
+        "purchase_place": "مكان الشراء",
+        "receipt_number": "رقم الإيصال",
+        "date_of_purchase": "تاريخ الشراء",
+        "repair_needed": "الإصلاح المطلوب",
+        "initial_summary": "الملخص الأولي",
+
+        // الحالة والدفع
         status: "الحالة",
-        "assigned_to": "مسند إلى",
-        "created_at": "تاريخ الإنشاء",
+        "payment_status": "حالة الدفع",
+        "shipping_cost": "تكلفة الشحن",
+        "new": "جديد",
+        "pending": "معلق",
+        "completed": "مكتمل",
+        "in_progress": "قيد التنفيذ",
+        "cancelled": "ملغى",
+        "closed": "مغلق",
+
+        // الأولوية
         priority: "الأولوية",
-        store: "المتجر",
-        actions: "الإجراءات",
+        "high": "عالية",
+        "medium": "متوسطة",
+        "low": "منخفضة",
+        "urgent": "عاجلة",
+
+        // معلومات الاتصال
+        "phone_number": "رقم الهاتف",
+        "email_address": "عنوان البريد الإلكتروني",
+        "address": "العنوان",
+
+        // الإجراءات العامة
+        "save": "حفظ",
+        "save_changes": "حفظ التغييرات",
+        "cancel": "إلغاء",
+        "create": "إنشاء",
+        "edit": "تعديل",
+        "delete": "حذف",
+        "search": "بحث",
+        "export": "تصدير",
+        "import": "استيراد",
+        "filter": "تصفية",
+        "view": "عرض",
+        "close": "إغلاق",
+        "submit": "إرسال",
+        "confirm": "تأكيد",
+        "back": "رجوع",
+        "next": "التالي",
+        "finish": "إنهاء",
+
+        // عناصر التحكم
+        "expand": "توسيع",
+        "collapse": "طي",
+        "show_more": "عرض المزيد",
+        "show_less": "عرض أقل",
+        "click_to": "انقر على",
+        "view_all": "عرض الكل",
+
+        // التصدير
         "export_excel": "تصدير إلى Excel",
         "export_pdf": "تصدير إلى PDF",
+        "export_settings": "إعدادات التصدير",
+        "configure_export": "تكوين تفضيلات تصدير البيانات",
+        "default_export_format": "تنسيق التصدير الافتراضي",
+        "include_filters": "تضمين الفلاتر الحالية",
+        "apply_active_filters": "تطبيق الفلاتر النشطة عند التصدير",
+        "export_available": "التصدير متاح لـ:",
+
+        // القوائم
+        "cases_list": "قائمة الحالات",
+        "customers_list": "قائمة العملاء",
+        "reminders_list": "قائمة التذكيرات",
+        "reports_analytics": "التقارير والتحليلات",
+
+        // البيانات والرسائل
         "no_data": "لا توجد بيانات",
-        loading: "جار التحميل...",
+        "no_results": "لا توجد نتائج",
+        "loading": "جار التحميل...",
+        "creating": "جار الإنشاء...",
+        "saving": "جار الحفظ...",
+        "updating": "جار التحديث...",
+        "deleting": "جار الحذف...",
+        "processing": "جار المعالجة...",
+
+        // البحث والتصفية
+        "search_placeholder": "بحث...",
+        "search_by_name_email": "البحث حسب الاسم أو البريد الإلكتروني أو الهاتف أو رقم العميل...",
+        "filter_by": "تصفية حسب",
+        "all": "الكل",
+
+        // التواريخ والوقت
+        "created": "تم الإنشاء",
+        "updated": "تم التحديث",
+        "created_at": "تاريخ الإنشاء",
+        "due_date": "تاريخ الاستحقاق",
+        "due": "مستحق",
+        "overdue": "متأخر",
+        "date_format": "تنسيق التاريخ",
+        "date_display": "كيفية عرض التواريخ في النظام",
+
+        // حقول النموذج
+        "title": "العنوان",
+        "description": "الوصف",
+        "optional": "اختياري",
+        "required": "مطلوب",
+
+        // التعيين
+        "assigned_by": "تم التعيين بواسطة",
+        "assigned_to": "مُعيَّن إلى",
+        "assign_to": "تعيين إلى",
+
+        // المصادقة
+        "sign_in": "تسجيل الدخول",
+        "signing_in": "جار تسجيل الدخول...",
+        "username": "اسم المستخدم",
+        "password": "كلمة المرور",
+        "enter_username": "أدخل اسم المستخدم",
+        "enter_password": "أدخل كلمة المرور",
+        "customer_case_management": "نظام إدارة حالات العملاء",
+        "sign_in_access": "سجل الدخول للوصول إلى لوحة التحكم",
+
+        // الملف الشخصي
+        "profile_info": "معلومات الملف الشخصي",
+        "update_personal_info": "تحديث معلوماتك الشخصية وبيانات الاعتماد",
+        "full_name": "الاسم الكامل",
+        "avatar_url": "رابط الصورة الشخصية (اختياري)",
+        "new_password": "كلمة المرور الجديدة (اختياري)",
+        "confirm_password": "تأكيد كلمة المرور الجديدة",
+        "leave_blank": "اتركه فارغاً للإبقاء على الحالي",
+        "min_6_chars": "6 أحرف على الأقل",
+        "must_match": "يجب أن تتطابق مع كلمة المرور الجديدة",
+        "password_change_note": "اترك حقول كلمة المرور فارغة إذا كنت لا تريد تغيير كلمة المرور الخاصة بك.",
+
+        // الأخطاء والإشعارات
+        "page_not_found": "الصفحة غير موجودة",
+        "page_not_exist": "الصفحة التي تبحث عنها غير موجودة أو تم نقلها.",
+        "go_back": "العودة",
+        "go_home": "الذهاب للرئيسية",
+        "error": "خطأ",
+        "success": "نجح",
+        "warning": "تحذير",
+        "info": "معلومات",
+
+        // الإعدادات
+        "language": "اللغة",
+        "system_language": "لغة النظام (يتطلب إعادة تحميل الصفحة)",
+        "reset_defaults": "إعادة تعيين إلى الافتراضي",
+        "unsaved_changes": "تغييرات غير محفوظة",
+        "preferences": "التفضيلات",
+
+        // التذكيرات
+        "team_reminders": "تذكيرات الفريق",
+        "new_reminder": "تذكير جديد",
+        "create_reminder": "إنشاء تذكير",
+        "create_team_reminder": "إنشاء تذكير للفريق",
+        "assign_task": "تعيين مهمة أو تذكير لأعضاء الفريق",
+        "provide_details": "قدم التفاصيل...",
+        "all_members": "جميع الأعضاء",
+        "no_subadmins": "لا يوجد مسؤولون فرعيون متاحون",
+        "members_selected": "الأعضاء المحددون",
+        "no_reminders": "لا توجد تذكيرات",
+        "create_reminder_start": "قم بإنشاء تذكير للبدء",
+        "no_reminders_assigned": "ليس لديك تذكيرات معينة",
+        "delete_reminder": "حذف التذكير",
+        "delete_confirmation": "هل أنت متأكد أنك تريد حذف هذا التذكير؟ لا يمكن التراجع عن هذا الإجراء.",
+        "update_status": "تحديث الحالة",
+        "mark_pending": "وضع علامة كمعلق",
+        "mark_progress": "وضع علامة قيد التنفيذ",
+        "mark_completed": "وضع علامة مكتمل",
+        "mark_cancelled": "إلغاء",
+        "from": "من",
+        "to": "إلى",
+
+        // عناصر واجهة المستخدم الإضافية
+        store: "المتجر",
+        actions: "الإجراءات",
+        "missing_info": "معلومات مفقودة",
+        "checking_phone": "جار التحقق من رقم الهاتف...",
+        "checking_serial": "جار التحقق من الرقم التسلسلي...",
+        "phone_exists": "رقم الهاتف موجود بالفعل",
+        "serial_exists": "الرقم التسلسلي موجود بالفعل",
+        "create_customer": "إنشاء عميل",
+        "no_data_export": "لا توجد بيانات للتصدير",
+        "exported_successfully": "تم التصدير بنجاح",
+        "send_notification": "إرسال إشعار",
+        "notification_question": "هل ترغب في إرسال إشعار عبر البريد الإلكتروني؟",
+        "yes_send": "نعم، أرسل",
+        "no_dont_send": "لا، لا ترسل",
       },
       fr: {
         dashboard: "Tableau de bord",
@@ -532,7 +826,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         loading: "लोड हो रहा है...",
       },
     };
-    
+
     return translations[language]?.[key] || key;
   };
 
