@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -15,16 +15,16 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
-import { 
-  insertInteractionHistorySchema, 
-  type InsertInteractionHistory, 
+import {
+  insertInteractionHistorySchema,
+  type InsertInteractionHistory,
   type ProductCaseWithHistory,
   caseStatusEnum,
   paymentStatusEnum,
   type UpdateProductCase,
   insertProductCaseSchema
 } from "@shared/schema";
-import { Trash2, Calendar, DollarSign, Package, Wrench, Link as LinkIcon, Download } from "lucide-react";
+import { Trash2, Calendar, DollarSign, Package, Wrench, Link as LinkIcon, Download, Clock, AlertCircle } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useSettings } from "@/lib/settings-context";
@@ -47,8 +47,22 @@ export default function CaseDetailPage() {
   const [, setLocation] = useLocation();
   const [deleteCaseId, setDeleteCaseId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [showStatusUpdateDialog, setShowStatusUpdateDialog] = useState(false);
+  const [statusUpdateData, setStatusUpdateData] = useState<any>(null);
   const { admin } = useAuth();
   const { toast } = useToast();
+
+  // Serial check state for editing
+  const [serialError, setSerialError] = useState("");
+  const [isCheckingSerial, setIsCheckingSerial] = useState(false);
+
+  const [showShipmentDialog, setShowShipmentDialog] = useState(false);
+  const [shipmentForm, setShipmentForm] = useState({
+    carrierCompany: "",
+    shippedDate: new Date().toISOString().split('T')[0],
+    trackingNumber: "",
+    shippingCost: ""
+  });
 
   const { data: caseData, isLoading } = useQuery<ProductCaseWithHistory>({
     queryKey: ['/api/cases', id],
@@ -109,6 +123,7 @@ export default function CaseDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/cases', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/cases'] });
       toast({
         title: "Success",
         description: "Case updated successfully",
@@ -116,9 +131,30 @@ export default function CaseDetailPage() {
       setIsEditing(false);
     },
     onError: (error: Error) => {
+      let message = error.message || "Failed to update case";
+
+      // Try to unwrap API error messages of the form "400: {\"message\":...}"
+      try {
+        const match = message.match(/^\d+:\s*(.*)$/);
+        if (match) {
+          const parsed = JSON.parse(match[1]);
+          if (parsed && typeof parsed.message === "string") {
+            message = parsed.message;
+          }
+        }
+      } catch {
+        // Ignore JSON parse errors and fall back to the original message
+      }
+
+      if (message.includes("Serial number already exists")) {
+        setSerialError(message);
+        // For serial validation errors, show only inline error and do not show a toast
+        return;
+      }
+
       toast({
         title: "Error",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     },
@@ -129,6 +165,10 @@ export default function CaseDetailPage() {
       return await apiRequest("DELETE", `/api/cases/${caseId}`, undefined);
     },
     onSuccess: () => {
+      if (caseData?.customer._id) {
+        queryClient.invalidateQueries({ queryKey: ['/api/customers', caseData.customer._id] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['/api/cases'] });
       toast({
         title: "Success",
         description: "Case deleted successfully",
@@ -148,8 +188,237 @@ export default function CaseDetailPage() {
     addNoteMutation.mutate(data.message);
   };
 
-  const onSubmitEdit = (data: any) => {
-    updateCaseMutation.mutate(data);
+  // Effect to check serial number on edit
+  useEffect(() => {
+    const currentSerial = watchEdit("serialNumber");
+
+    // Skip if empty or same as original
+    if (!currentSerial || !currentSerial.trim() || currentSerial === caseData?.serialNumber) {
+      setSerialError("");
+      setIsCheckingSerial(false);
+      return;
+    }
+
+    setIsCheckingSerial(true);
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        const data: any = await apiRequest("GET", `/api/cases/check-serial?serialNumber=${encodeURIComponent(currentSerial)}&excludeId=${id}`);
+        if (data.exists) {
+          setSerialError(data.message || "Serial number already exists");
+        } else {
+          setSerialError("");
+        }
+      } catch (error) {
+        console.error("Failed to check serial:", error);
+      } finally {
+        setIsCheckingSerial(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [watchEdit("serialNumber"), caseData, id]);
+
+  const onSubmitEdit = async (data: any) => {
+    if (!caseData) return;
+
+    // If there is a serial validation error, block submit (inline error already shown)
+    if (serialError) {
+      return;
+    }
+
+    // Track changes for interaction history (excluding status and paymentStatus as backend handles those)
+    const changes: string[] = [];
+    const fieldLabels: Record<string, string> = {
+      modelNumber: "Model Number",
+      serialNumber: "Serial Number",
+      purchasePlace: "Purchase Place",
+      dateOfPurchase: "Date of Purchase",
+      receiptNumber: "Receipt Number",
+      // Exclude status and paymentStatus - backend handles these
+      repairNeeded: "Repair Needed",
+      initialSummary: "Initial Summary",
+      shippingCost: "Shipping Cost",
+      receivedDate: "Received Date",
+      shippedDate: "Shipped Date",
+      carrierCompany: "Carrier",
+      trackingNumber: "Tracking Number",
+    };
+
+    // Build a minimal payload containing only fields that actually changed
+    const changedData: any = {};
+    const dateFieldsForDiff = ["dateOfPurchase", "receivedDate", "shippedDate"];
+
+    const normalizeDateValue = (value: any): string | null => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          return trimmed;
+        }
+        const d = new Date(trimmed);
+        return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
+      }
+      try {
+        const d = new Date(value);
+        return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
+      } catch {
+        return null;
+      }
+    };
+
+    Object.keys(fieldLabels).forEach((field) => {
+      const oldValue = caseData[field as keyof typeof caseData];
+      const newValue = data[field as keyof typeof data];
+
+      // For date fields, normalize to YYYY-MM-DD format for comparison
+      if (dateFieldsForDiff.includes(field)) {
+        const oldDate = normalizeDateValue(oldValue);
+        const newDate = normalizeDateValue(newValue);
+
+        // Skip if dates are the same (including both being null/undefined)
+        if (oldDate === newDate) return;
+
+        const oldDisplay = oldDate ? new Date(oldDate + "T00:00:00").toLocaleDateString() : "(empty)";
+        const newDisplay = newDate ? new Date(newDate + "T00:00:00").toLocaleDateString() : "(empty)";
+        changes.push(`${fieldLabels[field]} changed from "${oldDisplay}" to "${newDisplay}"`);
+
+        // For PATCH payload, send the raw new value so backend can handle empty strings as null where appropriate
+        changedData[field] = newValue;
+        return;
+      }
+
+      // Special handling for numeric shipping cost
+      if (field === "shippingCost") {
+        const oldNum = Number(oldValue ?? 0);
+        const newNum = Number(newValue ?? 0);
+        if (oldNum === newNum) return;
+
+        const oldDisplay = `$${oldNum.toFixed(2)}`;
+        const newDisplay = `$${newNum.toFixed(2)}`;
+        changes.push(`${fieldLabels[field]} changed from "${oldDisplay}" to "${newDisplay}"`);
+        changedData[field] = newNum;
+        return;
+      }
+
+      // For non-date, non-numeric fields
+      const normalizedOld = (oldValue === null || oldValue === undefined || oldValue === "") ? null : String(oldValue);
+      const normalizedNew = (newValue === null || newValue === undefined || newValue === "") ? null : String(newValue);
+
+      // Skip if values are the same (after normalization)
+      if (normalizedOld === normalizedNew) return;
+
+      const oldDisplay = normalizedOld || "(empty)";
+      const newDisplay = normalizedNew || "(empty)";
+      changes.push(`${fieldLabels[field]} changed from "${oldDisplay}" to "${newDisplay}"`);
+
+      // Include only changed fields in payload
+      changedData[field] = newValue;
+    });
+
+    if (data.status !== undefined && data.status !== caseData.status) {
+      changedData.status = data.status;
+
+      // Special handling for 'Shipped to Customer' status
+      if (data.status === 'Shipped to Customer') {
+        setStatusUpdateData({
+          changedData,
+          changes,
+          newStatus: data.status
+        });
+        // Pre-fill form with existing data if available
+        setShipmentForm({
+          carrierCompany: caseData.carrierCompany || "",
+          shippedDate: data.shippedDate ? new Date(data.shippedDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          trackingNumber: caseData.trackingNumber || "",
+          shippingCost: data.shippingCost ? String(data.shippingCost) : "0"
+        });
+        setShowShipmentDialog(true);
+        return;
+      }
+
+      // If status is changing (other than Shipped), we need to ask user about notification
+      setStatusUpdateData({
+        changedData,
+        changes,
+        newStatus: data.status
+      });
+      setShowStatusUpdateDialog(true);
+      return;
+    }
+
+    if (data.paymentStatus !== undefined && data.paymentStatus !== caseData.paymentStatus) {
+      changedData.paymentStatus = data.paymentStatus;
+    }
+
+    try {
+      await performUpdate(changedData, changes);
+    } catch (error) {
+      console.error("Error updating case:", error);
+    }
+  };
+
+  const performUpdate = async (dataToUpdate: any, historyChanges: string[]) => {
+    try {
+      await updateCaseMutation.mutateAsync(dataToUpdate);
+
+      if (historyChanges.length > 0) {
+        const changeMessage = historyChanges.join("; ");
+
+        apiRequest("POST", "/api/interactions", {
+          caseId: id,
+          type: "case_updated",
+          message: changeMessage,
+        }).catch(error => {
+          console.error("Error logging changes:", error);
+        });
+      }
+    } catch (error) {
+      console.error("Error updating case:", error);
+    }
+  };
+
+  const handleStatusUpdateConfirm = (shouldNotify: boolean) => {
+    if (!statusUpdateData) return;
+
+    const { changedData, changes } = statusUpdateData;
+
+    // Add notification flag to payload
+    const finalData = {
+      ...changedData,
+      sendNotification: shouldNotify
+    };
+
+    performUpdate(finalData, changes);
+    setShowStatusUpdateDialog(false);
+    setStatusUpdateData(null);
+  };
+
+  const handleShipmentConfirm = (shouldNotify: boolean) => {
+    if (!statusUpdateData) return;
+
+    const { changedData, changes } = statusUpdateData;
+
+    // Add shipment info to payload and changes
+    const finalData = {
+      ...changedData,
+      carrierCompany: shipmentForm.carrierCompany,
+      trackingNumber: shipmentForm.trackingNumber,
+      shippedDate: shipmentForm.shippedDate,
+      shippingCost: parseFloat(shipmentForm.shippingCost) || 0,
+      sendNotification: shouldNotify
+    };
+
+    // Add explicit history logs for shipment details
+    // changes.push(`Carrier: ${shipmentForm.carrierCompany || 'N/A'}`);
+    // changes.push(`Tracking #: ${shipmentForm.trackingNumber || 'N/A'}`);
+    // changes.push(`Ship Date: ${shipmentForm.shippedDate}`);
+    // changes.push(`Shipping Cost: $${finalData.shippingCost}`);
+
+    performUpdate(finalData, changes);
+    setShowShipmentDialog(false);
+    setStatusUpdateData(null);
   };
 
   const getInitials = (name: string) => {
@@ -157,95 +426,202 @@ export default function CaseDetailPage() {
   };
 
   // Export case details to PDF
-  const handleExportCaseDetailPDF = () => {
+  const handleExportCaseDetailPDF = async () => {
     if (!caseData) return;
 
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    
-    // Title
-    doc.setFontSize(18);
-    doc.setFont("helvetica", "bold");
-    doc.text("Case Details Report", pageWidth / 2, 20, { align: "center" });
-    
-    // Case ID
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Case ID: ${caseData._id}`, 14, 35);
-    
-    // Customer Information
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.text("Customer Information", 14, 50);
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "normal");
-    const customerInfo = [
-      ["Name", caseData.customer.name],
-      ["Phone", caseData.customer.phone],
-      ["Email", caseData.customer.email || "N/A"],
-      ["Address", caseData.customer.address || "N/A"],
-    ];
-    autoTable(doc, {
-      startY: 55,
-      head: [],
-      body: customerInfo,
-      theme: "plain",
-      styles: { fontSize: 10 },
-      columnStyles: { 0: { fontStyle: "bold", cellWidth: 40 } },
-    });
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 14;
 
-    // Case Information
-    let currentY = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.text("Case Information", 14, currentY);
-    currentY += 5;
-    
-    const caseInfo = [
-      ["Model Number", caseData.modelNumber],
-      ["Serial Number", caseData.serialNumber],
-      ["Status", caseData.status],
-      ["Payment Status", caseData.paymentStatus],
-      ["Store", caseData.purchasePlace || "N/A"],
-      ["Date of Purchase", formatDate(caseData.dateOfPurchase)],
-      ["Receipt Number", caseData.receiptNumber || "N/A"],
-      ["Repair Needed", caseData.repairNeeded || "N/A"],
-      ["Shipping Cost", `$${caseData.shippingCost || 0}`],
-      ["Created", formatDateTime(caseData.createdAt)],
-      ["Last Updated", formatDateTime(caseData.updatedAt)],
-    ];
-    autoTable(doc, {
-      startY: currentY,
-      head: [],
-      body: caseInfo,
-      theme: "striped",
-      styles: { fontSize: 10 },
-      columnStyles: { 0: { fontStyle: "bold", cellWidth: 50 } },
-    });
+      // --- Header ---
+      doc.setFillColor(140, 185, 174); // #8CB9AE
+      doc.rect(0, 0, pageWidth, 40, "F");
 
-    // Initial Summary
-    if (caseData.initialSummary) {
-      currentY = (doc as any).lastAutoTable.finalY + 10;
-      doc.setFontSize(14);
+      // Add Logo
+      try {
+        const logoUrl = "/logo.png";
+        const img = new Image();
+        img.src = logoUrl;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+
+        // Calculate aspect ratio to fit within 30px height max
+        const maxHeight = 30;
+        const ratio = maxHeight / img.height;
+        const width = img.width * ratio;
+
+        doc.addImage(img, "PNG", margin, 5, width, maxHeight);
+      } catch (e) {
+        console.error("Failed to load logo for PDF", e);
+      }
+
+      // Header Text (Right Aligned)
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(20);
       doc.setFont("helvetica", "bold");
-      doc.text("Initial Summary", 14, currentY);
-      currentY += 7;
+      doc.text("CASE DETAILS REPORT", pageWidth - margin, 18, { align: "right" });
+
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      const splitSummary = doc.splitTextToSize(caseData.initialSummary, pageWidth - 28);
-      doc.text(splitSummary, 14, currentY);
+      doc.text(`Generated: ${formatDateTime(new Date())}`, pageWidth - margin, 28, { align: "right" });
+
+      // --- Case Overview Section ---
+      let currentY = 50;
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Case ID: ${caseData._id}`, margin, currentY);
+
+      currentY += 8;
+
+      // Use autoTable columns to fit Customer and Case info side by side if possible? 
+      // Providing a compact single page view often requires utilizing the width better.
+      // We'll try to put Customer Info on Left, Case Info High-Level on Right?
+      // Or just reduce padding/spacing significantly.
+
+      // 1. Customer Details Table
+      doc.setFontSize(11); // Slightly smaller
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(30, 41, 59);
+      doc.text("Customer Information", margin, currentY);
+
+      autoTable(doc, {
+        startY: currentY + 2,
+        body: [
+          ["Name", caseData.customer.name],
+          ["Phone", caseData.customer.phone || "-"],
+          ["Email", caseData.customer.email || "-"],
+          ["Address", caseData.customer.address || "-"],
+          ["Customer ID", caseData.customer.customerId],
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [71, 85, 105], textColor: 255, fontStyle: 'bold' },
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 40, fillColor: [241, 245, 249] },
+          1: { cellWidth: 'auto' }
+        },
+        styles: { cellPadding: 2, fontSize: 9, valign: 'middle', lineColor: [203, 213, 225] }, // Compressed padding/font
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+
+      // 2. Case Details Table
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(30, 41, 59);
+      doc.text("Case Information", margin, currentY);
+
+      const caseInfoBody = [
+        ["Model Number", caseData.modelNumber || "-"],
+        ["Serial Number", caseData.serialNumber || "-"],
+        ["Status", caseData.status],
+        ["Payment Status", caseData.paymentStatus],
+        ["Purchase Place", caseData.purchasePlace || "-"],
+        ["Date of Purchase", formatDate(caseData.dateOfPurchase)],
+        ["Receipt Number", caseData.receiptNumber || "-"],
+        ["Repair Needed", caseData.repairNeeded || "-"],
+        ["Shipping Cost", `$${caseData.shippingCost || 0}`],
+        ["Created Date", formatDateTime(caseData.createdAt)],
+        ["Last Updated", formatDateTime(caseData.updatedAt)],
+      ];
+
+      autoTable(doc, {
+        startY: currentY + 2,
+        body: caseInfoBody,
+        theme: 'grid',
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 40, fillColor: [241, 245, 249] },
+          1: { cellWidth: 'auto' }
+        },
+        styles: { cellPadding: 2, fontSize: 9, valign: 'middle', lineColor: [203, 213, 225] },
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+
+      // 3. Initial Summary (Full Width Box)
+      if (caseData.initialSummary) {
+        // Check page break with more tolerance
+        if (currentY + 25 > pageHeight) {
+          doc.addPage();
+          currentY = 20;
+        }
+
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text("Initial Summary", margin, currentY);
+
+        autoTable(doc, {
+          startY: currentY + 2,
+          body: [[caseData.initialSummary]],
+          theme: 'grid',
+          styles: {
+            cellPadding: 4,
+            fontSize: 9,
+            fontStyle: 'italic',
+            textColor: [51, 65, 85],
+            lineColor: [203, 213, 225]
+          },
+          columnStyles: { 0: { cellWidth: 'auto' } }
+        });
+        currentY = (doc as any).lastAutoTable.finalY + 10;
+      }
+
+      // 4. Shipment Info (if applicable)
+      if (caseData.status === 'Shipped to Customer' || caseData.carrierCompany || caseData.trackingNumber) {
+        if (currentY + 30 > pageHeight) {
+          doc.addPage();
+          currentY = 20;
+        }
+
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text("Shipment Information", margin, currentY);
+
+        autoTable(doc, {
+          startY: currentY + 2,
+          body: [
+            ["Carrier", caseData.carrierCompany || "-"],
+            ["Tracking Number", caseData.trackingNumber || "-"],
+            ["Date of Shipping", caseData.shippedDate ? format(new Date(caseData.shippedDate), 'MMM dd, yyyy') : "-"],
+            ["Shipping Cost", `$${(caseData.shippingCost || 0).toFixed(2)}`],
+          ],
+          theme: 'grid',
+          columnStyles: {
+            0: { fontStyle: 'bold', cellWidth: 40, fillColor: [241, 245, 249] },
+            1: { cellWidth: 'auto' }
+          },
+          styles: { cellPadding: 2, fontSize: 9, valign: 'middle', lineColor: [203, 213, 225] },
+        });
+      }
+
+      // Footer with Page Numbers
+      const totalPages = (doc as any).internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: "center" });
+      }
+
+      doc.save(`Case_Report_${caseData.modelNumber || caseData._id}.pdf`);
+
+      toast({
+        title: "Success",
+        description: "Case details exported to PDF",
+      });
+    } catch (error) {
+      console.error("Export failed", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate PDF",
+        variant: "destructive"
+      });
     }
-
-    // Interaction History removed from PDF export to prevent text overlapping
-    // The full interaction history can be viewed on the case detail page
-
-    // Save PDF
-    doc.save(`case-${caseData._id}-${new Date().toISOString().split('T')[0]}.pdf`);
-    
-    toast({
-      title: "Success",
-      description: "Case details exported to PDF",
-    });
   };
 
   if (isLoading) {
@@ -283,8 +659,21 @@ export default function CaseDetailPage() {
                 variant="outline"
                 onClick={() => {
                   setIsEditing(true);
+                  // Initialize all editable fields
+                  setEditValue("modelNumber", caseData.modelNumber);
+                  setEditValue("serialNumber", caseData.serialNumber);
+                  setEditValue("purchasePlace", caseData.purchasePlace);
+                  setEditValue("dateOfPurchase", caseData.dateOfPurchase ? new Date(caseData.dateOfPurchase).toISOString().split('T')[0] : "");
+                  setEditValue("receiptNumber", caseData.receiptNumber);
                   setEditValue("status", caseData.status);
                   setEditValue("paymentStatus", caseData.paymentStatus);
+                  setEditValue("repairNeeded", caseData.repairNeeded);
+                  setEditValue("initialSummary", caseData.initialSummary);
+                  setEditValue("shippingCost", caseData.shippingCost);
+                  setEditValue("receivedDate", caseData.receivedDate ? new Date(caseData.receivedDate).toISOString().split('T')[0] : "");
+                  setEditValue("shippedDate", caseData.shippedDate ? new Date(caseData.shippedDate).toISOString().split('T')[0] : "");
+                  setEditValue("carrierCompany", caseData.carrierCompany);
+                  setEditValue("trackingNumber", caseData.trackingNumber);
                 }}
                 data-testid="button-edit-case"
               >
@@ -317,7 +706,7 @@ export default function CaseDetailPage() {
               </Button>
               <Button
                 onClick={handleSubmitEdit(onSubmitEdit)}
-                disabled={updateCaseMutation.isPending}
+                disabled={updateCaseMutation.isPending || isCheckingSerial || !!serialError}
                 data-testid="button-save-edit"
               >
                 {updateCaseMutation.isPending ? "Saving..." : "Save Changes"}
@@ -328,13 +717,16 @@ export default function CaseDetailPage() {
       }
     >
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        <Breadcrumb 
+        <Breadcrumb
           items={[
             { label: "Customers", href: "/customers" },
             { label: caseData.customer.name, href: `/customers/${caseData.customer._id}` },
             { label: `Case: ${caseData.modelNumber}` }
-          ]} 
+          ]}
         />
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-mono text-muted-foreground">Case ID: {caseData._id}</p>
+        </div>
         {/* Case Header */}
         <Card>
           <CardContent className="pt-6">
@@ -346,21 +738,20 @@ export default function CaseDetailPage() {
                   Customer: {caseData.customer.name} ({caseData.customer.customerId})
                 </p>
               </div>
-              <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap ${
-                caseData.status === 'New Case' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
+              <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap ${caseData.status === 'New Case' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
                 caseData.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300' :
-                caseData.status === 'Awaiting Parts' ? 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300' :
-                caseData.status === 'Repair Completed' ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' :
-                caseData.status === 'Shipped to Customer' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
-                'bg-gray-100 text-gray-800 dark:bg-gray-950 dark:text-gray-300'
-              }`} data-testid="text-case-status">
+                  caseData.status === 'Awaiting Parts' ? 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300' :
+                    caseData.status === 'Repair Completed' ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' :
+                      caseData.status === 'Shipped to Customer' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
+                        'bg-gray-100 text-gray-800 dark:bg-gray-950 dark:text-gray-300'
+                }`} data-testid="text-case-status">
                 {caseData.status}
               </span>
             </div>
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[2.5fr,1fr] gap-6">
           {/* Case Details */}
           <Card>
             <CardHeader>
@@ -369,41 +760,176 @@ export default function CaseDetailPage() {
             <CardContent className="space-y-4">
               {isEditing ? (
                 <form className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Status</Label>
-                    <Select
-                      value={watchEdit("status")}
-                      onValueChange={(value) => setEditValue("status", value)}
-                    >
-                      <SelectTrigger data-testid="select-edit-status">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {caseStatusEnum.options.map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Model Number</Label>
+                      <Input
+                        value={watchEdit("modelNumber") || ""}
+                        onChange={(e) => setEditValue("modelNumber", e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Serial Number</Label>
+                      <Input
+                        value={watchEdit("serialNumber") || ""}
+                        onChange={(e) => setEditValue("serialNumber", e.target.value)}
+                        className={serialError ? "border-destructive" : ""}
+                      />
+                      {isCheckingSerial && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3 animate-spin" />
+                          Checking serial...
+                        </p>
+                      )}
+                      {!isCheckingSerial && serialError && (
+                        <p className="text-xs text-destructive flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {serialError}
+                        </p>
+                      )}
+                    </div>
                   </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Purchase Place</Label>
+                      <Input
+                        value={watchEdit("purchasePlace") || ""}
+                        onChange={(e) => setEditValue("purchasePlace", e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Date of Purchase</Label>
+                      <Input
+                        type="date"
+                        value={watchEdit("dateOfPurchase") || ""}
+                        onChange={(e) => setEditValue("dateOfPurchase", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
-                    <Label>Payment Status</Label>
-                    <Select
-                      value={watchEdit("paymentStatus")}
-                      onValueChange={(value) => setEditValue("paymentStatus", value)}
-                    >
-                      <SelectTrigger data-testid="select-edit-payment">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {paymentStatusEnum.options.map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Receipt Number</Label>
+                    <Input
+                      value={watchEdit("receiptNumber") || ""}
+                      onChange={(e) => setEditValue("receiptNumber", e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select
+                        value={watchEdit("status")}
+                        onValueChange={(value) => setEditValue("status", value)}
+                      >
+                        <SelectTrigger data-testid="select-edit-status">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {caseStatusEnum.options.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {status}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Payment Status</Label>
+                      <Select
+                        value={watchEdit("paymentStatus")}
+                        onValueChange={(value) => setEditValue("paymentStatus", value)}
+                      >
+                        <SelectTrigger data-testid="select-edit-payment">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {paymentStatusEnum.options.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {status}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Repair Needed</Label>
+                    <Textarea
+                      value={watchEdit("repairNeeded") || ""}
+                      onChange={(e) => setEditValue("repairNeeded", e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Shipping Cost ($)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={watchEdit("shippingCost") || 0}
+                        onChange={(e) => setEditValue("shippingCost", parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Received Date</Label>
+                      <Input
+                        type="date"
+                        value={watchEdit("receivedDate") || ""}
+                        onChange={(e) => setEditValue("receivedDate", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {watchEdit("status") === 'Shipped to Customer' && (
+                    <div className="border-2 border-purple-100 rounded-lg p-4 bg-purple-50/30 mt-4">
+                      <div className="text-sm font-semibold text-purple-900 mb-2">Shipment Information</div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <Label>Shipped Date</Label>
+                          <Input
+                            type="date"
+                            value={watchEdit("shippedDate") || ""}
+                            onChange={(e) => setEditValue("shippedDate", e.target.value)}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Carrier</Label>
+                          <Input
+                            value={watchEdit("carrierCompany") || ""}
+                            onChange={(e) => setEditValue("carrierCompany", e.target.value)}
+                            placeholder="Carrier Name"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Tracking Number</Label>
+                          <Input
+                            value={watchEdit("trackingNumber") || ""}
+                            onChange={(e) => setEditValue("trackingNumber", e.target.value)}
+                            placeholder="Tracking #"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label>Initial Summary</Label>
+                    <Textarea
+                      value={watchEdit("initialSummary") || ""}
+                      onChange={(e) => setEditValue("initialSummary", e.target.value)}
+                      rows={4}
+                      placeholder="Why are we opening this case?"
+                    />
                   </div>
                 </form>
               ) : (
@@ -415,7 +941,7 @@ export default function CaseDetailPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground">Date of Purchase</p>
-                      <p className="font-medium">{format(new Date(caseData.dateOfPurchase), 'MMM dd, yyyy')}</p>
+                      <p className="font-medium">{caseData.dateOfPurchase ? format(new Date(caseData.dateOfPurchase), 'MMM dd, yyyy') : 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Receipt Number</p>
@@ -424,12 +950,11 @@ export default function CaseDetailPage() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Payment Status</p>
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium mt-1 ${
-                      caseData.paymentStatus === 'Pending' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300' :
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium mt-1 ${caseData.paymentStatus === 'Pending' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300' :
                       caseData.paymentStatus === 'Paid by Customer' ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' :
-                      caseData.paymentStatus === 'Under Warranty' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
-                      'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
-                    }`}>
+                        caseData.paymentStatus === 'Under Warranty' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
+                          'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                      }`}>
                       {caseData.paymentStatus}
                     </span>
                   </div>
@@ -463,6 +988,37 @@ export default function CaseDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Shipment Information Card */}
+          {(caseData.status === 'Shipped to Customer' || caseData.status === 'Closed' || caseData.carrierCompany || caseData.trackingNumber) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Shipment Information</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Carrier</p>
+                    <p className="font-medium">{caseData.carrierCompany || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Tracking Number</p>
+                    <p className="font-medium font-mono">{caseData.trackingNumber || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Date of Shipping</p>
+                    <p className="font-medium">
+                      {caseData.shippedDate ? format(new Date(caseData.shippedDate), 'MMM dd, yyyy') : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Shipping Amount</p>
+                    <p className="font-medium">${(caseData.shippingCost || 0).toFixed(2)}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Add Note */}
           <Card>
@@ -528,11 +1084,10 @@ export default function CaseDetailPage() {
                         <p className="text-xs font-medium">
                           Update by {interaction.adminName}
                         </p>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                          interaction.adminRole === 'superadmin' 
-                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
-                            : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                        }`}>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${interaction.adminRole === 'superadmin'
+                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                          : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                          }`}>
                           {interaction.adminRole === 'superadmin' ? 'Super Admin' : 'Admin'}
                         </span>
                       </div>
@@ -576,6 +1131,79 @@ export default function CaseDetailPage() {
             >
               Delete
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showStatusUpdateDialog} onOpenChange={setShowStatusUpdateDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Update Case Status</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are resolving a status change. Would you like to send a notification email to the customer?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleStatusUpdateConfirm(false)}>Update System Only</AlertDialogAction>
+            <AlertDialogAction onClick={() => handleStatusUpdateConfirm(true)}>Send Email & Update</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Shipment Details Dialog */}
+      <AlertDialog open={showShipmentDialog} onOpenChange={setShowShipmentDialog}>
+        <AlertDialogContent className="max-w-md sm:max-w-lg">
+          <AlertDialogHeader className="px-4 sm:px-10">
+            <AlertDialogTitle>Shipment Information</AlertDialogTitle>
+            <AlertDialogDescription>
+              Please enter the shipment details below. These will be included in the customer notification.
+            </AlertDialogDescription>
+            <div className="grid gap-4 py-6">
+              <div className="grid gap-2">
+                <Label htmlFor="carrier">Carrier Company</Label>
+                <Input
+                  id="carrier"
+                  value={shipmentForm.carrierCompany}
+                  onChange={(e) => setShipmentForm(prev => ({ ...prev, carrierCompany: e.target.value }))}
+                  placeholder="e.g. FedEx, UPS"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="shipDate">Date of Shipping</Label>
+                <Input
+                  id="shipDate"
+                  type="date"
+                  value={shipmentForm.shippedDate}
+                  onChange={(e) => setShipmentForm(prev => ({ ...prev, shippedDate: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="tracking">Tracking Number</Label>
+                <Input
+                  id="tracking"
+                  value={shipmentForm.trackingNumber}
+                  onChange={(e) => setShipmentForm(prev => ({ ...prev, trackingNumber: e.target.value }))}
+                  placeholder="Tracking #"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="amount">Shipping Amount ($)</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  step="0.01"
+                  value={shipmentForm.shippingCost}
+                  onChange={(e) => setShipmentForm(prev => ({ ...prev, shippingCost: e.target.value }))}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel className="mt-0">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleShipmentConfirm(false)}>Update System</AlertDialogAction>
+            <AlertDialogAction onClick={() => handleShipmentConfirm(true)}>Send Email & Update</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

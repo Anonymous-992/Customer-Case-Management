@@ -14,7 +14,7 @@ import {
 import type { Customer, ProductCase } from "@shared/schema";
 import { useSettings } from "@/lib/settings-context";
 
-type SearchField = 
+type SearchField =
   | "all"
   | "customer_name"
   | "customer_phone"
@@ -26,7 +26,8 @@ type SearchField =
   | "case_store"
   | "case_receipt"
   | "case_status"
-  | "case_payment";
+  | "case_payment"
+  | "case_id";
 
 export function UnifiedSearch() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -54,7 +55,7 @@ export function UnifiedSearch() {
   const customers = allCustomers?.filter(customer => {
     if (searchField === "all") return true;
     const query = searchQuery.toLowerCase();
-    
+
     switch (searchField) {
       case "customer_name":
         return customer.name?.toLowerCase().includes(query);
@@ -74,7 +75,7 @@ export function UnifiedSearch() {
   const cases = allCases?.filter(case_ => {
     if (searchField === "all") return true;
     const query = searchQuery.toLowerCase();
-    
+
     switch (searchField) {
       case "case_model":
         return case_.modelNumber?.toLowerCase().includes(query);
@@ -88,6 +89,8 @@ export function UnifiedSearch() {
         return case_.status?.toLowerCase().includes(query);
       case "case_payment":
         return case_.paymentStatus?.toLowerCase().includes(query);
+      case "case_id":
+        return case_._id.toLowerCase().includes(query);
       default:
         return true;
     }
@@ -113,7 +116,9 @@ export function UnifiedSearch() {
       case "case_store": return "Search by store...";
       case "case_receipt": return "Search by receipt number...";
       case "case_status": return "Search by status...";
+
       case "case_payment": return "Search by payment status...";
+      case "case_id": return "Search by Case ID...";
       default: return "Search customers, cases, serial numbers, products, stores...";
     }
   };
@@ -140,6 +145,7 @@ export function UnifiedSearch() {
             <SelectItem value="case_receipt">Receipt Number</SelectItem>
             <SelectItem value="case_status">Case Status</SelectItem>
             <SelectItem value="case_payment">Payment Status</SelectItem>
+            <SelectItem value="case_id">Case ID</SelectItem>
           </SelectContent>
         </Select>
 
@@ -259,22 +265,20 @@ export function UnifiedSearch() {
                                 </p>
                               </div>
                               <div className="flex flex-col items-end gap-1">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
-                                  case_.status === 'New Case' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${case_.status === 'New Case' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' :
                                   case_.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300' :
-                                  case_.status === 'Awaiting Parts' ? 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300' :
-                                  case_.status === 'Repair Completed' ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' :
-                                  case_.status === 'Shipped to Customer' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
-                                  'bg-gray-100 text-gray-800 dark:bg-gray-950 dark:text-gray-300'
-                                }`}>
+                                    case_.status === 'Awaiting Parts' ? 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300' :
+                                      case_.status === 'Repair Completed' ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' :
+                                        case_.status === 'Shipped to Customer' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
+                                          'bg-gray-100 text-gray-800 dark:bg-gray-950 dark:text-gray-300'
+                                  }`}>
                                   {case_.status}
                                 </span>
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                  case_.paymentStatus === 'Paid by Customer' ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${case_.paymentStatus === 'Paid by Customer' ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400' :
                                   case_.paymentStatus === 'Under Warranty' ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400' :
-                                  case_.paymentStatus === 'Company Covered' ? 'bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400' :
-                                  'bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
-                                }`}>
+                                    case_.paymentStatus === 'Company Covered' ? 'bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400' :
+                                      'bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
+                                  }`}>
                                   {case_.paymentStatus}
                                 </span>
                               </div>

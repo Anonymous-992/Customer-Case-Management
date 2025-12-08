@@ -12,7 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
 import { updateAdminSchema, type UpdateAdmin } from "@shared/schema";
-import { User } from "lucide-react";
+import { User, Upload, Loader2, Camera } from "lucide-react";
+import { useRef, useState } from "react";
+
 
 export default function ProfilePage() {
   const { admin, updateAdmin } = useAuth();
@@ -21,13 +23,65 @@ export default function ProfilePage() {
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<UpdateAdmin>({
     resolver: zodResolver(updateAdminSchema),
     defaultValues: {
       name: admin?.name || "",
+      avatar: admin?.avatar || "",
     },
   });
+
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const currentAvatar = watch("avatar");
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: formData
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || 'Upload failed');
+      }
+
+      const data = await res.json();
+      setValue("avatar", data.url, { shouldDirty: true });
+
+      toast({
+        title: "Image Uploaded",
+        description: "Click Save Changes to verify your new avatar",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Upload Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      // Reset input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: UpdateAdmin) => {
@@ -51,15 +105,15 @@ export default function ProfilePage() {
 
   const onSubmit = (data: UpdateAdmin) => {
     const updateData: any = {};
-    
+
     if (data.name && data.name !== admin?.name) {
       updateData.name = data.name;
     }
-    
+
     if (data.avatar !== undefined && data.avatar !== admin?.avatar) {
       updateData.avatar = data.avatar;
     }
-    
+
     // Only include password if newPassword is provided and not empty
     if (data.newPassword && data.newPassword.length > 0) {
       updateData.password = data.newPassword;
@@ -92,22 +146,55 @@ export default function ProfilePage() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-6 mb-6 pb-6 border-b">
-              <Avatar className="h-20 w-20">
-                <AvatarImage src={admin?.avatar} />
-                <AvatarFallback className="bg-primary/10 text-primary text-2xl font-medium">
-                  {admin ? getInitials(admin.name) : 'AD'}
-                </AvatarFallback>
-              </Avatar>
+              <div className="relative group">
+                <Avatar className="h-24 w-24 border-2 border-border cursor-pointer transition-opacity hover:opacity-90" onClick={() => fileInputRef.current?.click()}>
+                  <AvatarImage src={currentAvatar || admin?.avatar} className="object-cover" />
+                  <AvatarFallback className="bg-primary/10 text-primary text-3xl font-medium">
+                    {admin ? getInitials(admin.name) : 'AD'}
+                  </AvatarFallback>
+
+                  {/* Overlay for hover effect */}
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
+                    <Camera className="w-8 h-8 text-white" />
+                  </div>
+                </Avatar>
+
+                {isUploading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-background/50 rounded-full">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                )}
+              </div>
+
               <div>
                 <h3 className="text-xl font-semibold">{admin?.name}</h3>
                 <p className="text-sm text-muted-foreground">{admin?.email}</p>
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium mt-2 ${
-                  admin?.role === 'superadmin'
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${admin?.role === 'superadmin'
                     ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
                     : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                }`}>
-                  {admin?.role === 'superadmin' ? 'Super Admin' : 'Sub Admin'}
-                </span>
+                    }`}>
+                    {admin?.role === 'superadmin' ? 'Super Admin' : 'Sub Admin'}
+                  </span>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                  >
+                    <Upload className="h-3 w-3" />
+                    Upload Avatar
+                  </Button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                  />
+                </div>
               </div>
             </div>
 
@@ -125,19 +212,8 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="avatar">Avatar URL (optional)</Label>
-                <Input
-                  id="avatar"
-                  data-testid="input-profile-avatar"
-                  placeholder="https://example.com/avatar.jpg"
-                  {...register("avatar")}
-                  className={errors.avatar ? "border-destructive" : ""}
-                />
-                {errors.avatar && (
-                  <p className="text-sm text-destructive">{errors.avatar.message}</p>
-                )}
-              </div>
+              {/* Hidden avatar input - managed by file upload */}
+              <input type="hidden" {...register("avatar")} />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">

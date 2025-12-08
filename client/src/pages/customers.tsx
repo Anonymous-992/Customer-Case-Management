@@ -57,7 +57,7 @@ export default function CustomersPage() {
           },
         });
         const data = await response.json();
-        
+
         if (data.exists) {
           setPhoneError(`Phone number already exists for ${data.customer.name} (${data.customer.customerId})`);
         } else {
@@ -135,9 +135,9 @@ export default function CustomersPage() {
       { key: "phone", label: "Phone" },
       { key: "email", label: "Email" },
       { key: "address", label: "Address" },
-      { 
-        key: "createdAt", 
-        label: "Registered", 
+      {
+        key: "createdAt",
+        label: "Registered",
         format: (date) => formatDate(date)
       },
     ];
@@ -147,7 +147,7 @@ export default function CustomersPage() {
       sheetName: "Customers",
       columns,
       data: filteredCustomers,
-      title: "Case Management - Customers Export",
+      title: "All Customers Data",
     });
 
     toast({
@@ -168,7 +168,7 @@ export default function CustomersPage() {
 
   return (
     <DashboardLayout
-      title="Customers"
+      title={t("customers")}
       actions={
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -179,14 +179,14 @@ export default function CustomersPage() {
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Add New Customer</DialogTitle>
+              <DialogTitle>{t("add_new_customer")}</DialogTitle>
               <DialogDescription>
-                Create a new customer profile
+                {t("create_customer_profile")}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Customer Name</Label>
+                <Label htmlFor="name">{t("customer_name")}</Label>
                 <Input
                   id="name"
                   data-testid="input-customer-name"
@@ -200,7 +200,7 @@ export default function CustomersPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
+                <Label htmlFor="phone">{t("phone_number")}</Label>
                 <Input
                   id="phone"
                   data-testid="input-customer-phone"
@@ -214,7 +214,7 @@ export default function CustomersPage() {
                 />
                 {isCheckingPhone && (
                   <p className="text-sm text-muted-foreground flex items-center gap-1">
-                    <span className="animate-spin">⏳</span> Checking phone number...
+                    <span className="animate-spin">⏳</span> {t("checking_phone")}
                   </p>
                 )}
                 {errors.phone && (
@@ -229,7 +229,7 @@ export default function CustomersPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="email">{t("email_address")}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -244,7 +244,7 @@ export default function CustomersPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="address">Address</Label>
+                <Label htmlFor="address">{t("address")}</Label>
                 <Textarea
                   id="address"
                   data-testid="input-customer-address"
@@ -265,7 +265,7 @@ export default function CustomersPage() {
                   onClick={() => setIsDialogOpen(false)}
                   className="flex-1"
                 >
-                  Cancel
+                  {t("cancel")}
                 </Button>
                 <Button
                   type="submit"
@@ -273,7 +273,7 @@ export default function CustomersPage() {
                   disabled={createCustomerMutation.isPending || !!phoneError || isCheckingPhone}
                   data-testid="button-submit-customer"
                 >
-                  {createCustomerMutation.isPending ? "Creating..." : "Create Customer"}
+                  {createCustomerMutation.isPending ? t("creating") : t("create_customer")}
                 </Button>
               </div>
             </form>
@@ -282,14 +282,14 @@ export default function CustomersPage() {
       }
     >
       <div className="p-6 max-w-7xl mx-auto space-y-6">
-        <Breadcrumb items={[{ label: "Customers" }]} />
+        <Breadcrumb items={[{ label: t("customers") }]} />
         {/* Search */}
         <Card>
           <CardContent className="pt-6">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name, email, phone, or Customer ID..."
+                placeholder={t("search_by_name_email")}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 data-testid="input-search-customers"
@@ -309,7 +309,7 @@ export default function CustomersPage() {
               className="gap-2"
             >
               <Download className="h-4 w-4" />
-              Export ({settings?.exportSettings.defaultFormat?.toUpperCase() || "Excel"})
+              {t("export")} ({settings?.exportSettings.defaultFormat?.toUpperCase() || "Excel"})
             </Button>
             <Button
               variant="outline"
@@ -368,13 +368,13 @@ export default function CustomersPage() {
                 {searchTerm ? (
                   <>
                     <Search className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-muted-foreground">No customers found matching "{searchTerm}"</p>
+                    <p className="text-muted-foreground">{t("no_results")} "{searchTerm}"</p>
                   </>
                 ) : (
                   <>
                     <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-muted-foreground">No customers yet</p>
-                    <p className="text-sm text-muted-foreground">Create one to get started</p>
+                    <p className="text-muted-foreground">{t("no_customers")}</p>
+                    <p className="text-sm text-muted-foreground">{t("create_one_start")}</p>
                   </>
                 )}
               </div>

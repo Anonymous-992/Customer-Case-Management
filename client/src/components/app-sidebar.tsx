@@ -85,9 +85,9 @@ export function AppSidebar() {
         <SidebarGroup>
           <div className="px-4 py-4">
             <div className="flex items-center gap-3">
-              <img 
-                src="/logo.png" 
-                alt="Company Logo" 
+              <img
+                src="/logo.png"
+                alt="Company Logo"
                 className="h-6 sm:h-8 w-auto max-w-[100px] sm:max-w-[120px] object-contain"
                 onError={(e) => {
                   // Fallback to text if logo fails to load
@@ -100,9 +100,9 @@ export function AppSidebar() {
                 <p className="text-xs text-muted-foreground">Case Management</p>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Case Management System</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("customer_case_management")}</p>
           </div>
-          <SidebarGroupLabel>Menu</SidebarGroupLabel>
+          <SidebarGroupLabel>{t("menu")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
@@ -112,8 +112,8 @@ export function AppSidebar() {
                       <item.icon className="h-4 w-4" />
                       <span>{t(item.titleKey)}</span>
                       {'badge' in item && item.badge && item.badge > 0 && (
-                        <Badge 
-                          variant="destructive" 
+                        <Badge
+                          variant="destructive"
                           className="ml-auto h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] font-semibold rounded-full animate-pulse"
                         >
                           {item.badge > 9 ? '9+' : item.badge}
@@ -127,7 +127,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      
+
       <SidebarFooter className="p-4 border-t border-sidebar-border">
         <div className="flex items-center gap-3 mb-3">
           <Avatar className="h-9 w-9">

@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { SettingsProvider } from "@/lib/settings-context";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Preloader } from "@/components/preloader";
+import { InstallPrompt } from "@/components/install-prompt";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
 import CustomersPage from "@/pages/customers";
@@ -35,7 +36,7 @@ function Router() {
       <Route path="/login">
         {admin ? <Redirect to="/" /> : <LoginPage />}
       </Route>
-      
+
       <Route path="/">
         <ProtectedRoute>
           <DashboardPage />
@@ -103,6 +104,7 @@ function App() {
           <SettingsProvider>
             <Preloader />
             <Toaster />
+            <InstallPrompt />
             <Router />
           </SettingsProvider>
         </AuthProvider>

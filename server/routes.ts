@@ -12,14 +12,93 @@ import { authenticateToken, requireSuperAdmin, generateToken, type AuthRequest }
 import { isMongoDBAvailable } from "./db";
 import { memoryStorage } from "./storage/memory-storage";
 import * as notificationService from "./services/notification.service";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import express from "express";
+
+// Configure storage for avatar uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(process.cwd(), 'client', 'public', 'uploads');
+    // Ensure directory exists
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Generate unique filename
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'avatar-' + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
+
+
+// Helper function to generate unique customer ID
+async function generateUniqueCustomerId(): Promise<string> {
+  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+  while (true) {
+    let randomStr = '';
+    for (let i = 0; i < 6; i++) {
+      randomStr += charset.charAt(Math.floor(Math.random() * charset.length));
+    }
+    const customerId = `CUST-${randomStr}`;
+
+    let exists = false;
+    if (isMongoDBAvailable) {
+      const existing = await Customer.findOne({ customerId });
+      if (existing) exists = true;
+    } else {
+      const customers = await memoryStorage.findAllCustomers();
+      if (customers.find(c => c.customerId === customerId)) exists = true;
+    }
+
+    if (!exists) return customerId;
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Serve uploaded files statically (in case direct access via client/public doesn't work in some setups, though Vite usually handles it. 
+  // But strictly speaking, for production express serving:
+  app.use('/uploads', express.static(path.join(process.cwd(), 'client', 'public', 'uploads')));
+
   // ===== AUTH ROUTES =====
+  app.post("/api/upload", authenticateToken, upload.single('file'), (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: "No file uploaded" });
+      }
+
+      // Return the relative URL path
+      const fileUrl = `/uploads/${req.file.filename}`;
+      res.json({ success: true, url: fileUrl });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { username, password } = req.body;
 
-      const admin = isMongoDBAvailable 
+      const admin = isMongoDBAvailable
         ? await Admin.findOne({ username })
         : await memoryStorage.findAdminByUsername(username);
 
@@ -68,6 +147,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? await Admin.findByIdAndUpdate(req.admin!._id, updates, { new: true }).select('-password')
         : await memoryStorage.updateAdmin(req.admin!._id, updates);
 
+      // If avatar was updated, update all interaction history records for this admin
+      if (avatar !== undefined && isMongoDBAvailable) {
+        await InteractionHistory.updateMany(
+          { adminId: req.admin!._id },
+          { $set: { adminAvatar: avatar } }
+        );
+      }
+
       res.json({
         success: true,
         admin: {
@@ -92,7 +179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const admins = isMongoDBAvailable
         ? await Admin.find().select('-password').sort({ createdAt: -1 })
         : (await memoryStorage.findAdminsByRole()).map(a => ({ ...a, password: undefined }));
-      
+
       res.json(admins);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -192,8 +279,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingCustomer = isMongoDBAvailable
         ? await Customer.findOne({ phone })
         : await memoryStorage.findCustomerByPhone(phone);
-      
-      res.json({ 
+
+      res.json({
         exists: !!existingCustomer,
         customer: existingCustomer ? {
           name: existingCustomer.name,
@@ -208,21 +295,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/customers", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { q } = req.query;
-      
+
       let customers;
       if (q && typeof q === 'string' && q.trim().length > 0) {
         // Search mode - only if query is not empty
         const searchQuery = q.trim();
         customers = isMongoDBAvailable
           ? await Customer.find({
-              $or: [
-                { name: { $regex: searchQuery, $options: 'i' } },
-                { phone: { $regex: searchQuery, $options: 'i' } },
-                { email: { $regex: searchQuery, $options: 'i' } },
-                { customerId: { $regex: searchQuery, $options: 'i' } },
-                { address: { $regex: searchQuery, $options: 'i' } },
-              ]
-            }).sort({ createdAt: -1 })
+            $or: [
+              { name: { $regex: searchQuery, $options: 'i' } },
+              { phone: { $regex: searchQuery, $options: 'i' } },
+              { email: { $regex: searchQuery, $options: 'i' } },
+              { customerId: { $regex: searchQuery, $options: 'i' } },
+              { address: { $regex: searchQuery, $options: 'i' } },
+            ]
+          }).sort({ createdAt: -1 })
           : await memoryStorage.searchCustomers(searchQuery);
       } else {
         // Get all customers
@@ -230,7 +317,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? await Customer.find().sort({ createdAt: -1 })
           : await memoryStorage.findAllCustomers();
       }
-      
+
       res.json(customers);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -270,15 +357,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : await memoryStorage.findCustomerByPhone(phone);
 
       if (existingCustomer) {
-        return res.status(400).json({ 
-          message: `Phone number already exists for customer: ${existingCustomer.name} (${existingCustomer.customerId})` 
+        return res.status(400).json({
+          message: `Phone number already exists for customer: ${existingCustomer.name} (${existingCustomer.customerId})`
         });
       }
 
       let customer;
+      const customerId = await generateUniqueCustomerId();
+
       if (isMongoDBAvailable) {
-        const count = await Customer.countDocuments();
-        const customerId = `CUST-${String(count + 1001).padStart(4, '0')}`;
 
         customer = new Customer({
           customerId,
@@ -302,6 +389,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } else {
         customer = await memoryStorage.createCustomer({
+          customerId,
           name,
           phone,
           address,
@@ -326,16 +414,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+
+  app.patch("/api/customers/:id", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { name, email, address, phone } = req.body;
+
+      // If phone is being updated, check for duplicates
+      if (phone) {
+        const existingCustomer = isMongoDBAvailable
+          ? await Customer.findOne({ phone, _id: { $ne: req.params.id } })
+          : await memoryStorage.findCustomerByPhoneExcluding(phone, req.params.id);
+
+        if (existingCustomer) {
+          return res.status(400).json({
+            message: `Phone number already exists for customer: ${existingCustomer.name} (${existingCustomer.customerId})`
+          });
+        }
+      }
+
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (email !== undefined) updates.email = email;
+      if (address !== undefined) updates.address = address;
+      if (phone !== undefined) updates.phone = phone;
+
+      const customer = isMongoDBAvailable
+        ? await Customer.findByIdAndUpdate(req.params.id, updates, { new: true })
+        : await memoryStorage.updateCustomer(req.params.id, updates);
+
+      if (!customer) {
+        return res.status(404).json({ message: "Customer not found" });
+      }
+
+      res.json({ success: true, customer });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.patch("/api/customers/:id/notifications", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { notificationPreferences } = req.body;
 
       const customer = isMongoDBAvailable
         ? await Customer.findByIdAndUpdate(
-            req.params.id,
-            { notificationPreferences },
-            { new: true }
-          )
+          req.params.id,
+          { notificationPreferences },
+          { new: true }
+        )
         : await memoryStorage.updateCustomer(req.params.id, { notificationPreferences });
 
       if (!customer) {
@@ -360,7 +486,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (isMongoDBAvailable) {
         await ProductCase.deleteMany({ customerId: req.params.id });
-        
+
         await InteractionHistory.create({
           customerId: req.params.id,
           type: 'customer_deleted',
@@ -400,8 +526,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingCase = isMongoDBAvailable
         ? await ProductCase.findOne({ serialNumber })
         : await memoryStorage.findCaseBySerialNumber(serialNumber);
-      
-      res.json({ 
+
+      res.json({
         exists: !!existingCase,
         case: existingCase ? {
           modelNumber: existingCase.modelNumber,
@@ -416,24 +542,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/cases", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { q } = req.query;
-      
+
       let cases;
       if (q && typeof q === 'string' && q.trim().length > 0) {
         // Search mode - only if query is not empty
         const searchQuery = q.trim();
+        const searchConditions: any[] = [
+          { modelNumber: { $regex: searchQuery, $options: 'i' } },
+          { serialNumber: { $regex: searchQuery, $options: 'i' } },
+          { purchasePlace: { $regex: searchQuery, $options: 'i' } },
+          { receiptNumber: { $regex: searchQuery, $options: 'i' } },
+          { status: { $regex: searchQuery, $options: 'i' } },
+          { paymentStatus: { $regex: searchQuery, $options: 'i' } },
+          { repairNeeded: { $regex: searchQuery, $options: 'i' } },
+          { initialSummary: { $regex: searchQuery, $options: 'i' } },
+        ];
+
+        // Add ID search allowing partial matches by converting _id to string
+        // Note: $regexMatch requires MongoDB 4.2+
+        searchConditions.push({
+          $expr: {
+            $regexMatch: {
+              input: { $toString: "$_id" },
+              regex: searchQuery,
+              options: "i"
+            }
+          }
+        });
+
         cases = isMongoDBAvailable
           ? await ProductCase.find({
-              $or: [
-                { modelNumber: { $regex: searchQuery, $options: 'i' } },
-                { serialNumber: { $regex: searchQuery, $options: 'i' } },
-                { purchasePlace: { $regex: searchQuery, $options: 'i' } },
-                { receiptNumber: { $regex: searchQuery, $options: 'i' } },
-                { status: { $regex: searchQuery, $options: 'i' } },
-                { paymentStatus: { $regex: searchQuery, $options: 'i' } },
-                { repairNeeded: { $regex: searchQuery, $options: 'i' } },
-                { initialSummary: { $regex: searchQuery, $options: 'i' } },
-              ]
-            }).sort({ createdAt: -1 })
+            $or: searchConditions
+          }).sort({ createdAt: -1 })
           : await memoryStorage.searchCases(searchQuery);
       } else {
         // Get all cases
@@ -441,7 +581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? await ProductCase.find().sort({ createdAt: -1 })
           : await memoryStorage.findAllCases();
       }
-      
+
       res.json(cases);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -492,35 +632,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         shippedDate,
         receivedDate,
         initialSummary,
+        carrierCompany,
+        trackingNumber,
       } = req.body;
 
-      // Check for duplicate serial number
-      const existingCase = isMongoDBAvailable
-        ? await ProductCase.findOne({ serialNumber })
-        : await memoryStorage.findCaseBySerialNumber(serialNumber);
+      // Only check for duplicate serial number if one is provided
+      if (serialNumber && serialNumber.trim() !== '') {
+        const existingCase = isMongoDBAvailable
+          ? await ProductCase.findOne({ serialNumber })
+          : await memoryStorage.findCaseBySerialNumber(serialNumber);
 
-      if (existingCase) {
-        return res.status(400).json({ 
-          message: `Serial number already exists for product: ${existingCase.modelNumber} (Case already registered)` 
-        });
+        if (existingCase) {
+          return res.status(400).json({
+            message: `Serial number already exists for product: ${existingCase.modelNumber} (Case already registered)`
+          });
+        }
       }
 
       let productCase;
       if (isMongoDBAvailable) {
         productCase = new ProductCase({
           customerId,
-          modelNumber,
-          serialNumber,
-          purchasePlace,
-          dateOfPurchase: new Date(dateOfPurchase),
-          receiptNumber,
+          modelNumber: modelNumber || '',
+          serialNumber: serialNumber || '',
+          purchasePlace: purchasePlace || '',
+          dateOfPurchase: dateOfPurchase ? new Date(dateOfPurchase) : undefined,
+          receiptNumber: receiptNumber || '',
           status: status || 'New Case',
-          repairNeeded,
+          repairNeeded: repairNeeded || '',
           paymentStatus: paymentStatus || 'Pending',
           shippingCost: shippingCost || 0,
           shippedDate: shippedDate ? new Date(shippedDate) : undefined,
           receivedDate: receivedDate ? new Date(receivedDate) : undefined,
-          initialSummary,
+          carrierCompany: carrierCompany || '',
+          trackingNumber: trackingNumber || '',
+          initialSummary: initialSummary || '',
           createdBy: req.admin!._id,
         });
 
@@ -530,32 +676,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           caseId: productCase._id,
           customerId,
           type: 'case_created',
-          message: `Case created. ${initialSummary}`,
+          message: `Case created${initialSummary ? '. ' + initialSummary : ''}`,
           adminId: req.admin!._id,
           adminName: req.admin!.name,
           adminAvatar: req.admin!.avatar,
           adminRole: req.admin!.role,
           metadata: {
-            modelNumber,
-            serialNumber,
+            modelNumber: modelNumber || 'Not provided',
+            serialNumber: serialNumber || 'Not provided',
             status,
           },
         });
       } else {
         productCase = await memoryStorage.createCase({
           customerId,
-          modelNumber,
-          serialNumber,
-          purchasePlace,
-          dateOfPurchase: new Date(dateOfPurchase),
-          receiptNumber,
+          modelNumber: modelNumber || '',
+          serialNumber: serialNumber || '',
+          purchasePlace: purchasePlace || '',
+          dateOfPurchase: dateOfPurchase ? new Date(dateOfPurchase) : undefined,
+          receiptNumber: receiptNumber || '',
           status: status || 'New Case',
-          repairNeeded,
+          repairNeeded: repairNeeded || '',
           paymentStatus: paymentStatus || 'Pending',
           shippingCost: shippingCost || 0,
           shippedDate: shippedDate ? new Date(shippedDate) : undefined,
           receivedDate: receivedDate ? new Date(receivedDate) : undefined,
-          initialSummary,
+          initialSummary: initialSummary || '',
           createdBy: req.admin!._id,
         });
 
@@ -563,33 +709,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
           caseId: productCase._id,
           customerId,
           type: 'case_created',
-          message: `Case created. ${initialSummary}`,
+          message: `Case created${initialSummary ? '. ' + initialSummary : ''}`,
           adminId: req.admin!._id,
           adminName: req.admin!.name,
           adminAvatar: req.admin!.avatar,
           adminRole: req.admin!.role,
           metadata: {
-            modelNumber,
-            serialNumber,
+            modelNumber: modelNumber || 'Not provided',
+            serialNumber: serialNumber || 'Not provided',
             status,
           },
         });
       }
 
-      // Send email notification to customer about new case
+      // Send email notification to customer about new case (conditionally)
       try {
-        const customer = isMongoDBAvailable
-          ? await Customer.findById(customerId)
-          : await memoryStorage.findCustomerById(customerId);
+        if (req.body.sendNotification !== false) {
+          const customer = isMongoDBAvailable
+            ? await Customer.findById(customerId)
+            : await memoryStorage.findCustomerById(customerId);
 
-        if (customer && customer.notificationPreferences?.email) {
-          await notificationService.sendCaseCreatedEmail(
-            customer.email,
-            customer.name,
-            modelNumber,
-            serialNumber,
-            status || 'New Case'
-          );
+          if (customer && customer.notificationPreferences?.email) {
+            await notificationService.sendCaseCreatedEmail(
+              customer.email,
+              customer.name,
+              modelNumber || '',
+              serialNumber || '',
+              status || 'New Case',
+              productCase._id.toString()
+            );
+          }
         }
       } catch (emailError) {
         console.error('Failed to send case creation email:', emailError);
@@ -597,6 +746,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.status(201).json(productCase);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Check if a serial number exists (for validation during edit)
+  app.get("/api/cases/check-serial", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { serialNumber, excludeId } = req.query;
+
+      if (!serialNumber || typeof serialNumber !== 'string') {
+        return res.json({ exists: false });
+      }
+
+      // Skip check for empty or whitespace-only serials
+      if (!serialNumber.trim()) {
+        return res.json({ exists: false });
+      }
+
+      let existingCase;
+      if (isMongoDBAvailable) {
+        const query: any = { serialNumber };
+        if (excludeId && typeof excludeId === 'string') {
+          const trimmed = excludeId.trim();
+          // Only apply excludeId filter if it looks like a valid MongoDB ObjectId
+          if (/^[0-9a-fA-F]{24}$/.test(trimmed)) {
+            query._id = { $ne: trimmed };
+          }
+        }
+        existingCase = await ProductCase.findOne(query);
+      } else {
+        existingCase = await memoryStorage.findCaseBySerialNumber(serialNumber);
+        // Manual filter for memory storage
+        if (existingCase && excludeId && typeof excludeId === 'string' && existingCase._id === excludeId) {
+          existingCase = null;
+        }
+      }
+
+      if (existingCase) {
+        return res.json({
+          exists: true,
+          message: `Serial number already exists for product: ${existingCase.modelNumber}`
+        });
+      }
+
+      res.json({ exists: false });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -643,8 +838,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : await memoryStorage.findCaseBySerialNumber(serialNumber);
 
         if (existingCase) {
-          return res.status(400).json({ 
-            message: `Serial number already exists for product: ${existingCase.modelNumber}` 
+          return res.status(400).json({
+            message: `Serial number already exists for product: ${existingCase.modelNumber}`
           });
         }
       }
@@ -726,7 +921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/cases/:id/complete", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { customerInfo, caseInfo } = req.body;
-      
+
       // Get the case
       const productCase = isMongoDBAvailable
         ? await ProductCase.findById(req.params.id)
@@ -747,12 +942,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update customer with full information
       if (customerInfo) {
+        let finalCustomerId = customerInfo.customerId;
+
+        // If no ID provided and current ID is pending, generate a new permanent ID
+        if (!finalCustomerId && customer.customerId.startsWith('PENDING-')) {
+          finalCustomerId = await generateUniqueCustomerId();
+        } else if (!finalCustomerId) {
+          finalCustomerId = customer.customerId;
+        }
+
         if (isMongoDBAvailable) {
           await Customer.findByIdAndUpdate(customer._id, {
             name: customerInfo.name,
             email: customerInfo.email,
             address: customerInfo.address,
-            customerId: customerInfo.customerId || customer.customerId.replace('PENDING-', 'CUST-'),
+            customerId: finalCustomerId,
           });
           customer = await Customer.findById(customer._id);
         } else {
@@ -760,7 +964,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             name: customerInfo.name,
             email: customerInfo.email,
             address: customerInfo.address,
-            customerId: customerInfo.customerId || customer.customerId.replace('PENDING-', 'CUST-'),
+            customerId: finalCustomerId,
           });
           customer = await memoryStorage.findCustomerById(customer._id);
         }
@@ -812,27 +1016,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/cases/:id", authenticateToken, async (req: AuthRequest, res) => {
     try {
+      const { id } = req.params;
+
+      // If serial number is being updated, check for duplicates (exclude current case)
+      if (req.body.serialNumber && typeof req.body.serialNumber === 'string' && req.body.serialNumber.trim() !== '') {
+        const newSerial = req.body.serialNumber.trim();
+
+        let duplicateCase: any = null;
+        if (isMongoDBAvailable) {
+          duplicateCase = await ProductCase.findOne({
+            serialNumber: newSerial,
+            _id: { $ne: id },
+          });
+        } else {
+          const found = await memoryStorage.findCaseBySerialNumber(newSerial);
+          if (found && found._id !== id) {
+            duplicateCase = found;
+          }
+        }
+
+        if (duplicateCase) {
+          return res.status(400).json({
+            message: `Serial number already exists for product: ${duplicateCase.modelNumber}`,
+          });
+        }
+      }
+
       const existingCase = isMongoDBAvailable
-        ? await ProductCase.findById(req.params.id)
-        : await memoryStorage.findCaseById(req.params.id);
+        ? await ProductCase.findById(id)
+        : await memoryStorage.findCaseById(id);
 
       if (!existingCase) {
         return res.status(404).json({ message: "Case not found" });
       }
 
       const oldStatus = existingCase.status;
+      const oldPaymentStatus = existingCase.paymentStatus;
+
+      // Build updates object with ALL possible fields
       const updates: any = {};
-      
-      if (req.body.status) updates.status = req.body.status;
-      if (req.body.paymentStatus) updates.paymentStatus = req.body.paymentStatus;
+
+      if (req.body.modelNumber !== undefined) updates.modelNumber = req.body.modelNumber;
+      if (req.body.serialNumber !== undefined) updates.serialNumber = req.body.serialNumber;
+      if (req.body.purchasePlace !== undefined) updates.purchasePlace = req.body.purchasePlace;
+
+      // Only update dateOfPurchase if it's a valid date string (not empty)
+      if (req.body.dateOfPurchase !== undefined) {
+        if (req.body.dateOfPurchase && req.body.dateOfPurchase.trim() !== '') {
+          const date = new Date(req.body.dateOfPurchase);
+          updates.dateOfPurchase = isNaN(date.getTime()) ? null : date;
+        } else {
+          updates.dateOfPurchase = null;
+        }
+      }
+
+      if (req.body.receiptNumber !== undefined) updates.receiptNumber = req.body.receiptNumber;
+      if (req.body.status !== undefined) updates.status = req.body.status;
+      if (req.body.paymentStatus !== undefined) updates.paymentStatus = req.body.paymentStatus;
+      if (req.body.repairNeeded !== undefined) updates.repairNeeded = req.body.repairNeeded;
+      if (req.body.initialSummary !== undefined) updates.initialSummary = req.body.initialSummary;
       if (req.body.shippingCost !== undefined) updates.shippingCost = req.body.shippingCost;
-      if (req.body.shippedDate) updates.shippedDate = new Date(req.body.shippedDate);
-      if (req.body.receivedDate) updates.receivedDate = new Date(req.body.receivedDate);
+      if (req.body.carrierCompany !== undefined) updates.carrierCompany = req.body.carrierCompany;
+      if (req.body.trackingNumber !== undefined) updates.trackingNumber = req.body.trackingNumber;
+
+      // Validate shippedDate
+      if (req.body.shippedDate !== undefined) {
+        if (req.body.shippedDate && req.body.shippedDate.trim() !== '') {
+          const date = new Date(req.body.shippedDate);
+          updates.shippedDate = isNaN(date.getTime()) ? null : date;
+        } else {
+          updates.shippedDate = null;
+        }
+      }
+
+      // Validate receivedDate
+      if (req.body.receivedDate !== undefined) {
+        if (req.body.receivedDate && req.body.receivedDate.trim() !== '') {
+          const date = new Date(req.body.receivedDate);
+          updates.receivedDate = isNaN(date.getTime()) ? null : date;
+        } else {
+          updates.receivedDate = null;
+        }
+      }
 
       const productCase = isMongoDBAvailable
-        ? await ProductCase.findByIdAndUpdate(req.params.id, updates, { new: true })
-        : await memoryStorage.updateCase(req.params.id, updates);
+        ? await ProductCase.findByIdAndUpdate(id, updates, { new: true })
+        : await memoryStorage.updateCase(id, updates);
 
+      // Only create interaction for status change (detailed changes are logged by frontend)
       if (req.body.status && req.body.status !== oldStatus) {
         const interactionData = {
           caseId: req.params.id,
@@ -855,32 +1126,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await memoryStorage.createInteraction(interactionData);
         }
 
-        // Send notification to customer about status change
-        try {
-          const customer = isMongoDBAvailable
-            ? await Customer.findById(existingCase.customerId)
-            : await memoryStorage.findCustomerById(existingCase.customerId);
+        // Send notification to customer about status change ONLY if requested
+        if (req.body.sendNotification === true) {
+          try {
+            const customer = isMongoDBAvailable
+              ? await Customer.findById(existingCase.customerId)
+              : await memoryStorage.findCustomerById(existingCase.customerId);
 
-          if (customer && productCase) {
-            const notificationResults = await notificationService.sendCaseStatusNotification(
-              customer,
-              productCase,
-              oldStatus,
-              req.body.status
-            );
-            
-            console.log('Notification results:', notificationResults);
+            if (customer && productCase) {
+              const notificationResults = await notificationService.sendCaseStatusNotification(
+                customer,
+                productCase,
+                oldStatus,
+                req.body.status
+              );
+
+              console.log('Notification results:', notificationResults);
+            }
+          } catch (notificationError: any) {
+            console.error('Failed to send notification:', notificationError.message);
+            // Don't fail the request if notification fails
           }
-        } catch (notificationError: any) {
-          console.error('Failed to send notification:', notificationError.message);
-          // Don't fail the request if notification fails
         }
-      } else {
+      }
+
+      // Send notification for payment status change (if applicable)
+      if (req.body.paymentStatus && req.body.paymentStatus !== oldPaymentStatus) {
         const interactionData = {
           caseId: req.params.id,
           customerId: existingCase.customerId,
-          type: 'case_updated' as const,
-          message: `Case information updated`,
+          type: 'payment_updated' as const,
+          message: `Payment status changed from "${oldPaymentStatus}" to "${req.body.paymentStatus}"`,
           adminId: req.admin!._id,
           adminName: req.admin!.name,
           adminAvatar: req.admin!.avatar,
@@ -893,6 +1169,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await memoryStorage.createInteraction(interactionData);
         }
       }
+
+      // Note: Removed generic "Case information updated" log 
+      // Frontend now logs detailed field-by-field changes
 
       res.json(productCase);
     } catch (error: any) {
@@ -1004,7 +1283,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/quick-cases/:id/complete", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { customerInfo, caseInfo } = req.body;
-      
+
       // Get the Quick Case
       const quickCase = isMongoDBAvailable
         ? await QuickCase.findById(req.params.id)
@@ -1025,13 +1304,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!customer) {
         // Create new customer
+        const customerId = await generateUniqueCustomerId();
+
         if (isMongoDBAvailable) {
           customer = new Customer({
             name: customerInfo.name,
             phone: quickCase.phone,
             email: customerInfo.email,
             address: customerInfo.address,
-            customerId: `CUST-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+            customerId,
             createdBy: req.admin!._id,
             notificationPreferences: {
               email: true,
@@ -1041,6 +1322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await customer.save();
         } else {
           customer = await memoryStorage.createCustomer({
+            customerId,
             name: customerInfo.name,
             phone: quickCase.phone,
             email: customerInfo.email,
@@ -1057,8 +1339,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : await memoryStorage.findCaseBySerialNumber(caseInfo.serialNumber);
 
         if (existingCase) {
-          return res.status(400).json({ 
-            message: `Serial number already exists for product: ${existingCase.modelNumber}` 
+          return res.status(400).json({
+            message: `Serial number already exists for product: ${existingCase.modelNumber}`
           });
         }
       }
@@ -1068,13 +1350,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isMongoDBAvailable) {
         productCase = new ProductCase({
           customerId: customer._id,
-          modelNumber: caseInfo.modelNumber,
-          serialNumber: caseInfo.serialNumber,
-          purchasePlace: caseInfo.purchasePlace,
-          dateOfPurchase: caseInfo.dateOfPurchase ? new Date(caseInfo.dateOfPurchase) : new Date(),
-          receiptNumber: caseInfo.receiptNumber || 'N/A',
+          modelNumber: caseInfo.modelNumber || '',
+          serialNumber: caseInfo.serialNumber || '',
+          purchasePlace: caseInfo.purchasePlace || '',
+          dateOfPurchase: caseInfo.dateOfPurchase ? new Date(caseInfo.dateOfPurchase) : undefined,
+          receiptNumber: caseInfo.receiptNumber || '',
           status: caseInfo.status || 'New Case',
-          repairNeeded: caseInfo.repairNeeded || 'To be determined',
+          repairNeeded: caseInfo.repairNeeded || '',
           paymentStatus: caseInfo.paymentStatus || 'Pending',
           shippingCost: caseInfo.shippingCost || 0,
           initialSummary: caseInfo.initialSummary || quickCase.notes || 'Completed from Quick Case',
@@ -1103,13 +1385,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         productCase = await memoryStorage.createCase({
           customerId: customer._id,
-          modelNumber: caseInfo.modelNumber,
-          serialNumber: caseInfo.serialNumber,
-          purchasePlace: caseInfo.purchasePlace,
-          dateOfPurchase: caseInfo.dateOfPurchase ? new Date(caseInfo.dateOfPurchase) : new Date(),
-          receiptNumber: caseInfo.receiptNumber || 'N/A',
+          modelNumber: caseInfo.modelNumber || '',
+          serialNumber: caseInfo.serialNumber || '',
+          purchasePlace: caseInfo.purchasePlace || '',
+          dateOfPurchase: caseInfo.dateOfPurchase ? new Date(caseInfo.dateOfPurchase) : undefined,
+          receiptNumber: caseInfo.receiptNumber || '',
           status: caseInfo.status || 'New Case',
-          repairNeeded: caseInfo.repairNeeded || 'To be determined',
+          repairNeeded: caseInfo.repairNeeded || '',
           paymentStatus: caseInfo.paymentStatus || 'Pending',
           shippingCost: caseInfo.shippingCost || 0,
           initialSummary: caseInfo.initialSummary || quickCase.notes || 'Completed from Quick Case',
@@ -1134,19 +1416,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await memoryStorage.updateQuickCase(req.params.id, { status: 'completed' });
       }
 
-      // Send email notification to customer if enabled
+      // Send email notification if requested
       try {
-        if (customer.notificationPreferences?.email) {
-          await notificationService.sendCaseCreatedEmail(
-            customer.email,
-            customer.name,
-            productCase.modelNumber,
-            productCase.serialNumber,
-            productCase.status
-          );
+        if (req.body.sendNotification === true) {
+          if (customer && customer.notificationPreferences?.email) {
+            await notificationService.sendCaseCreatedEmail(
+              customer.email,
+              customer.name,
+              productCase.modelNumber || '',
+              productCase.serialNumber || '',
+              productCase.status,
+              productCase._id.toString()
+            );
+          }
         }
       } catch (emailError) {
-        console.error('Failed to send email notification:', emailError);
+        console.error('Failed to send case creation email:', emailError);
       }
 
       res.status(201).json({ case: productCase, customer, quickCase });
@@ -1217,7 +1502,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Total counts
       const totalCases = cases.length;
       const totalCustomers = customers.length;
-      const openCases = cases.filter(c => 
+      const openCases = cases.filter(c =>
         c.status !== 'Closed' && c.status !== 'Shipped to Customer'
       ).length;
       const closedCases = cases.filter(c => c.status === 'Closed').length;
@@ -1285,12 +1570,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const date = new Date(now);
         date.setDate(date.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
-        
+
         const count = cases.filter(c => {
           const caseDate = new Date(c.createdAt).toISOString().split('T')[0];
           return caseDate === dateStr;
         }).length;
-        
+
         last30Days.push({ date: dateStr, count });
       }
 
@@ -1344,12 +1629,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== REMINDER ROUTES =====
-  
+
   // Get all reminders for current admin (assigned to them or created by them)
   app.get("/api/reminders", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const adminId = req.admin!._id.toString();
-      
+
       let reminders;
       if (isMongoDBAvailable) {
         reminders = await Reminder.find({
@@ -1360,7 +1645,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }).sort({ createdAt: -1 });
       } else {
         const allReminders = await memoryStorage.findAllReminders();
-        reminders = allReminders.filter((r: any) => 
+        reminders = allReminders.filter((r: any) =>
           r.assignedTo.includes(adminId) || r.assignedBy === adminId
         );
       }
@@ -1375,36 +1660,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/reminders/unread-count", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const adminId = req.admin!._id.toString();
-      
+
       let count = 0;
-      
+
       if (isMongoDBAvailable) {
         // Count reminders assigned to this admin that they haven't read
         const unreadAssigned = await Reminder.countDocuments({
           assignedTo: adminId,
           isReadByAssignees: { $ne: adminId }
         });
-        
+
         // Count reminders created by this admin with unread updates from assignees
         const unreadUpdates = await Reminder.countDocuments({
           assignedBy: adminId,
           hasUnreadUpdate: true
         });
-        
+
         count = unreadAssigned + unreadUpdates;
       } else {
         const allReminders = await memoryStorage.findAllReminders();
-        
+
         // Count unread assigned reminders
-        const unreadAssigned = allReminders.filter((r: any) => 
+        const unreadAssigned = allReminders.filter((r: any) =>
           r.assignedTo.includes(adminId) && !(r.isReadByAssignees || []).includes(adminId)
         ).length;
-        
+
         // Count reminders with updates for creator
         const unreadUpdates = allReminders.filter((r: any) =>
           r.assignedBy === adminId && r.hasUnreadUpdate === true
         ).length;
-        
+
         count = unreadAssigned + unreadUpdates;
       }
 
@@ -1426,7 +1711,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const admin = isMongoDBAvailable
           ? await Admin.findById(adminId)
           : await memoryStorage.findAdminById(adminId);
-        
+
         if (admin) {
           assignedToNames.push(admin.name);
         }
@@ -1514,7 +1799,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (reminder) {
             const isAssignee = reminder.assignedTo.some(id => id.toString() === currentAdmin._id.toString());
             const isCreator = reminder.assignedBy.toString() === currentAdmin._id.toString();
-            
+
             // If a Sub Admin assignee is updating (not the creator), mark as unread update for Super Admin
             if (isAssignee && !isCreator) {
               updates.hasUnreadUpdate = true;
@@ -1526,7 +1811,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (reminder) {
             const isAssignee = reminder.assignedTo.includes(currentAdmin._id.toString());
             const isCreator = reminder.assignedBy === currentAdmin._id.toString();
-            
+
             if (isAssignee && !isCreator) {
               updates.hasUnreadUpdate = true;
               updates.lastUpdatedBy = currentAdmin._id.toString();
@@ -1578,24 +1863,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== SETTINGS ROUTES =====
-  
+
   // Get settings for current user (or global if superadmin)
   app.get("/api/settings", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const currentAdmin = req.admin!;
       const userId = currentAdmin.role === "superadmin" ? undefined : currentAdmin._id.toString();
-      
+
       let settings;
       if (isMongoDBAvailable) {
         settings = await Settings.findOne({ userId: userId || { $exists: false } });
-        
+
         // Create default settings if none exist
         if (!settings) {
           settings = await Settings.create({ userId });
         }
       } else {
         settings = await memoryStorage.findSettings(userId);
-        
+
         // Create default settings if none exist
         if (!settings) {
           settings = await memoryStorage.createSettings({ userId });
@@ -1614,11 +1899,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const currentAdmin = req.admin!;
       const updates = req.body;
       const userId = currentAdmin.role === "superadmin" ? undefined : currentAdmin._id.toString();
-      
+
       let settings;
       if (isMongoDBAvailable) {
         settings = await Settings.findOne({ userId: userId || { $exists: false } });
-        
+
         if (!settings) {
           // Create new settings with updates
           settings = await Settings.create({ userId, ...updates });
@@ -1642,12 +1927,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (updates.preferences) {
             settings.preferences = { ...settings.preferences, ...updates.preferences };
           }
-          
+
           await settings.save();
         }
       } else {
         settings = await memoryStorage.findSettings(userId);
-        
+
         if (!settings) {
           settings = await memoryStorage.createSettings({ userId, ...updates });
         } else {
@@ -1666,7 +1951,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const currentAdmin = req.admin!;
       const userId = currentAdmin.role === "superadmin" ? undefined : currentAdmin._id.toString();
-      
+
       const defaultSettings = {
         notifications: {
           emailEnabled: true,
@@ -1697,7 +1982,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           dateFormat: "DD/MM/YYYY",
         },
       };
-      
+
       let settings;
       if (isMongoDBAvailable) {
         settings = await Settings.findOneAndUpdate(
@@ -1754,7 +2039,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/test/send-email", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { email } = req.body;
-      
+
       if (!email) {
         return res.status(400).json({ success: false, message: 'Email address required' });
       }
@@ -1764,18 +2049,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'Test User',
         'Test Model',
         'TEST-123',
-        'New Case'
+        'New Case',
+        'TEST-CASE-ID-123'
       );
 
       res.json({
         success: result,
-        message: result 
+        message: result
           ? `✅ Test email sent to ${email}. Check your inbox!`
           : '❌ Failed to send email. Check server logs for details.',
       });
     } catch (error: any) {
-      res.status(500).json({ 
-        success: false, 
+      res.status(500).json({
+        success: false,
         message: error.message,
         tip: 'Check server logs for detailed error message'
       });
