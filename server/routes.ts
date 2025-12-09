@@ -628,6 +628,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status,
         repairNeeded,
         paymentStatus,
+        payment,
         shippingCost,
         shippedDate,
         receivedDate,
@@ -661,6 +662,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: status || 'New Case',
           repairNeeded: repairNeeded || '',
           paymentStatus: paymentStatus || 'Pending',
+          payment: payment || '',
           shippingCost: shippingCost || 0,
           shippedDate: shippedDate ? new Date(shippedDate) : undefined,
           receivedDate: receivedDate ? new Date(receivedDate) : undefined,
@@ -698,6 +700,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: status || 'New Case',
           repairNeeded: repairNeeded || '',
           paymentStatus: paymentStatus || 'Pending',
+          payment: payment || '',
           shippingCost: shippingCost || 0,
           shippedDate: shippedDate ? new Date(shippedDate) : undefined,
           receivedDate: receivedDate ? new Date(receivedDate) : undefined,
@@ -1073,6 +1076,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.body.receiptNumber !== undefined) updates.receiptNumber = req.body.receiptNumber;
       if (req.body.status !== undefined) updates.status = req.body.status;
       if (req.body.paymentStatus !== undefined) updates.paymentStatus = req.body.paymentStatus;
+      if (req.body.payment !== undefined) updates.payment = req.body.payment;
       if (req.body.repairNeeded !== undefined) updates.repairNeeded = req.body.repairNeeded;
       if (req.body.initialSummary !== undefined) updates.initialSummary = req.body.initialSummary;
       if (req.body.shippingCost !== undefined) updates.shippingCost = req.body.shippingCost;
@@ -1358,6 +1362,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: caseInfo.status || 'New Case',
           repairNeeded: caseInfo.repairNeeded || '',
           paymentStatus: caseInfo.paymentStatus || 'Pending',
+          payment: caseInfo.payment || '',
           shippingCost: caseInfo.shippingCost || 0,
           initialSummary: caseInfo.initialSummary || quickCase.notes || 'Completed from Quick Case',
           createdBy: req.admin!._id,
@@ -1393,6 +1398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: caseInfo.status || 'New Case',
           repairNeeded: caseInfo.repairNeeded || '',
           paymentStatus: caseInfo.paymentStatus || 'Pending',
+          payment: caseInfo.payment || '',
           shippingCost: caseInfo.shippingCost || 0,
           initialSummary: caseInfo.initialSummary || quickCase.notes || 'Completed from Quick Case',
           createdBy: req.admin!._id,

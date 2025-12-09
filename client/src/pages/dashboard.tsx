@@ -542,6 +542,7 @@ export default function DashboardPage() {
     setEditFormData({
       status: case_.status,
       paymentStatus: case_.paymentStatus,
+      payment: case_.payment,
       repairNeeded: case_.repairNeeded,
       initialSummary: case_.initialSummary,
       serialNumber: case_.serialNumber,
@@ -585,6 +586,7 @@ export default function DashboardPage() {
       purchasePlace: "Purchase Place",
       dateOfPurchase: "Date of Purchase",
       receiptNumber: "Receipt Number",
+      payment: "Payment",
       repairNeeded: "Repair Needed",
       initialSummary: "Initial Summary",
       carrierCompany: "Carrier",
@@ -1535,6 +1537,14 @@ export default function DashboardPage() {
                       </div>
 
                       <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="payment">Payment</Label>
+                        <Input
+                          id="payment"
+                          {...register("payment")}
+                        />
+                      </div>
+
+                      <div className="space-y-2 md:col-span-2">
                         <Label htmlFor="repairNeeded">Repair Needed *</Label>
                         <Input
                           id="repairNeeded"
@@ -2395,6 +2405,16 @@ export default function DashboardPage() {
                     </Select>
                   </div>
 
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="edit-payment-text">Payment</Label>
+                    <Input
+                      id="edit-payment-text"
+                      value={editFormData.payment || ""}
+                      onChange={(e) => setEditFormData({ ...editFormData, payment: e.target.value })}
+                      placeholder="Enter payment details (optional)"
+                    />
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="edit-payment">Payment Status</Label>
                     <Select
@@ -2772,6 +2792,17 @@ export default function DashboardPage() {
                     </Select>
                   </div>
 
+                  {/* Payment */}
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="case-payment-text">Payment</Label>
+                    <Input
+                      id="case-payment-text"
+                      placeholder="Enter payment details (optional)"
+                      value={completionCaseData.payment || ''}
+                      onChange={(e) => setCompletionCaseData({ ...completionCaseData, payment: e.target.value })}
+                    />
+                  </div>
+
                   {/* Shipping Cost */}
                   <div className="space-y-2">
                     <Label htmlFor="case-shipping">Shipping Cost (₹)</Label>
@@ -2842,6 +2873,7 @@ export default function DashboardPage() {
                         dateOfPurchase: completionCaseData.dateOfPurchase || undefined,
                         status: completionCaseData.status || 'New Case',
                         paymentStatus: completionCaseData.paymentStatus || 'Pending',
+                        payment: completionCaseData.payment,
                         shippingCost: completionCaseData.shippingCost || 0,
                         repairNeeded: completionCaseData.repairNeeded,
                         initialSummary: completionCaseData.initialSummary || 'Completed from Quick Case',

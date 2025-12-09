@@ -236,6 +236,7 @@ export default function CaseDetailPage() {
       dateOfPurchase: "Date of Purchase",
       receiptNumber: "Receipt Number",
       // Exclude status and paymentStatus - backend handles these
+      payment: "Payment",
       repairNeeded: "Repair Needed",
       initialSummary: "Initial Summary",
       shippingCost: "Shipping Cost",
@@ -818,6 +819,14 @@ export default function CaseDetailPage() {
                     />
                   </div>
 
+                  <div className="space-y-2">
+                    <Label>Payment</Label>
+                    <Input
+                      value={watchEdit("payment") || ""}
+                      onChange={(e) => setEditValue("payment", e.target.value)}
+                    />
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Status</Label>
@@ -947,6 +956,10 @@ export default function CaseDetailPage() {
                       <p className="text-sm text-muted-foreground">Receipt Number</p>
                       <p className="font-medium font-mono">{caseData.receiptNumber}</p>
                     </div>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Payment</p>
+                    <p className="font-medium">{caseData.payment || 'N/A'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Payment Status</p>

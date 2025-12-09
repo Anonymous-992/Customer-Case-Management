@@ -563,6 +563,20 @@ export default function CustomerProfilePage() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label htmlFor="payment">Payment</Label>
+                  <Input
+                    id="payment"
+                    {...register("payment")}
+                    className={errors.payment ? "border-destructive" : ""}
+                  />
+                  {errors.payment && (
+                    <p className="text-sm text-destructive">
+                      {errors.payment.message as any}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="repairNeeded">Repair Needed</Label>
                   <Textarea
                     id="repairNeeded"

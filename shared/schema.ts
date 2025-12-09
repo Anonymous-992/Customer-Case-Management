@@ -105,6 +105,7 @@ export const productCaseSchema = z.object({
   status: caseStatusEnum,
   repairNeeded: z.string(),
   paymentStatus: paymentStatusEnum,
+  payment: z.string().optional(),
   shippingCost: z.number(),
   shippedDate: z.date().optional(),
   receivedDate: z.date().optional(),
@@ -130,6 +131,7 @@ export const insertProductCaseSchema = z.object({
   initialSummary: z.string().optional(),
 
   paymentStatus: paymentStatusEnum.optional().default("Pending"),
+  payment: z.string().optional(),
   shippingCost: z.number().optional().default(0),
   shippedDate: z.string().optional(),
   receivedDate: z.string().optional(),

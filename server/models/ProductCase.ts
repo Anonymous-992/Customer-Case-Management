@@ -10,6 +10,7 @@ export interface IProductCase extends Document {
   status: 'New Case' | 'In Progress' | 'Awaiting Parts' | 'Repair Completed' | 'Shipped to Customer' | 'Closed';
   repairNeeded?: string;
   paymentStatus: 'Pending' | 'Paid by Customer' | 'Under Warranty' | 'Company Covered';
+  payment?: string;
   shippingCost: number;
   shippedDate?: Date;
   receivedDate?: Date;
@@ -71,6 +72,12 @@ const ProductCaseSchema = new Schema<IProductCase>({
     enum: ['Pending', 'Paid by Customer', 'Under Warranty', 'Company Covered'],
     default: 'Pending',
     required: true,
+  },
+  payment: {
+    type: String,
+    required: false,
+    trim: true,
+    default: '',
   },
   shippingCost: {
     type: Number,
