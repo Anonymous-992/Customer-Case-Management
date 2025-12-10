@@ -1547,8 +1547,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         casesByStatus[c.status] = (casesByStatus[c.status] || 0) + 1;
       });
 
-      // Cases by payment status
+      // Cases by payment status with payment amounts
       const casesByPaymentStatus: Record<string, number> = {
+        'Pending': 0,
+        'Paid by Customer': 0,
+        'Under Warranty': 0,
+        'Company Covered': 0,
+      };
+      const paymentAmountsByStatus: Record<string, number> = {
         'Pending': 0,
         'Paid by Customer': 0,
         'Under Warranty': 0,
@@ -1556,6 +1562,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       cases.forEach(c => {
         casesByPaymentStatus[c.paymentStatus] = (casesByPaymentStatus[c.paymentStatus] || 0) + 1;
+        // Parse payment amount if it exists (convert string to number)
+        const paymentAmount = c.payment ? parseFloat(c.payment) || 0 : 0;
+        paymentAmountsByStatus[c.paymentStatus] = (paymentAmountsByStatus[c.paymentStatus] || 0) + paymentAmount;
       });
 
       // Average resolution time (for closed cases)
@@ -1585,7 +1594,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         last30Days.push({ date: dateStr, count });
       }
 
-      // Monthly revenue (shipping costs)
+      // Monthly revenue (from payment field)
       const currentMonth = now.getMonth();
       const currentYear = now.getFullYear();
       const monthlyRevenue = cases
@@ -1593,7 +1602,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const caseDate = new Date(c.createdAt);
           return caseDate.getMonth() === currentMonth && caseDate.getFullYear() === currentYear;
         })
-        .reduce((sum, c) => sum + (c.shippingCost || 0), 0);
+        .reduce((sum, c) => {
+          const paymentAmount = c.payment ? parseFloat(c.payment) || 0 : 0;
+          return sum + paymentAmount;
+        }, 0);
 
       // Top 10 stores by case count
       const topStores = Object.entries(casesByStore)
@@ -1624,6 +1636,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         casesByStatus,
         casesByPaymentStatus,
+        paymentAmountsByStatus,
         topStores,
         topProducts,
         topIssues,

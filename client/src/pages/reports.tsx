@@ -3,29 +3,29 @@ import { DashboardLayout } from "@/components/dashboard-layout";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  BarChart, 
-  Bar, 
-  LineChart, 
-  Line, 
-  PieChart, 
-  Pie, 
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
   Cell,
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer 
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
 } from "recharts";
-import { 
-  TrendingUp, 
-  Package, 
-  Store, 
-  AlertCircle, 
-  Clock, 
-  DollarSign, 
-  Users, 
+import {
+  TrendingUp,
+  Package,
+  Store,
+  AlertCircle,
+  Clock,
+  DollarSign,
+  Users,
   FileText,
   Activity
 } from "lucide-react";
@@ -41,6 +41,7 @@ interface ReportStatistics {
   };
   casesByStatus: Record<string, number>;
   casesByPaymentStatus: Record<string, number>;
+  paymentAmountsByStatus: Record<string, number>;
   topStores: { name: string; count: number }[];
   topProducts: { name: string; count: number }[];
   topIssues: { issue: string; count: number }[];
@@ -152,8 +153,8 @@ export default function ReportsPage() {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${stats.summary.monthlyRevenue}</div>
-              <p className="text-xs text-muted-foreground">This month</p>
+              <div className="text-2xl font-bold">${stats.summary.monthlyRevenue.toFixed(2)}</div>
+              <p className="text-xs text-muted-foreground">This month (from payments)</p>
             </CardContent>
           </Card>
         </div>
@@ -183,19 +184,19 @@ export default function ReportsPage() {
                   <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={stats.caseTrend}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis 
-                        dataKey="date" 
+                      <XAxis
+                        dataKey="date"
                         tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       />
                       <YAxis />
-                      <Tooltip 
+                      <Tooltip
                         labelFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                       />
                       <Legend />
-                      <Line 
-                        type="monotone" 
-                        dataKey="count" 
-                        stroke="#2563eb" 
+                      <Line
+                        type="monotone"
+                        dataKey="count"
+                        stroke="#2563eb"
                         strokeWidth={2}
                         name="Cases Created"
                       />
@@ -253,6 +254,7 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
+
               {/* Payment Status Pie Chart */}
               <Card>
                 <CardHeader>
@@ -279,7 +281,31 @@ export default function ReportsPage() {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0];
+                            const paymentStatus = data.name as string;
+                            const caseCount = data.value as number;
+                            const paymentAmount = stats.paymentAmountsByStatus[paymentStatus] || 0;
+
+                            return (
+                              <div className="bg-background border border-border rounded-lg shadow-lg p-3">
+                                <p className="font-semibold text-sm mb-2">{paymentStatus}</p>
+                                <div className="space-y-1 text-sm">
+                                  <p className="text-muted-foreground">
+                                    Cases: <span className="font-medium text-foreground">{caseCount}</span>
+                                  </p>
+                                  <p className="text-muted-foreground">
+                                    Total Amount: <span className="font-medium text-green-600">${paymentAmount.toFixed(2)}</span>
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                   {/* Legend as separate component with better layout */}
@@ -287,14 +313,20 @@ export default function ReportsPage() {
                     {paymentStatusData.map((entry, index) => {
                       const total = paymentStatusData.reduce((sum, d) => sum + d.value, 0);
                       const percent = ((entry.value / total) * 100).toFixed(0);
+                      const paymentAmount = stats.paymentAmountsByStatus[entry.name] || 0;
                       return (
-                        <div key={entry.name} className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                          />
-                          <span className="truncate">{entry.name}</span>
-                          <span className="text-muted-foreground ml-auto">({percent}%)</span>
+                        <div key={entry.name} className="flex flex-col gap-1 p-2 border rounded-md">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                            />
+                            <span className="truncate text-xs font-medium">{entry.name}</span>
+                          </div>
+                          <div className="ml-5 text-xs text-muted-foreground">
+                            <div>{entry.value} cases ({percent}%)</div>
+                            <div className="font-semibold text-green-600">${paymentAmount.toFixed(2)}</div>
+                          </div>
                         </div>
                       );
                     })}
@@ -319,9 +351,9 @@ export default function ReportsPage() {
                   <BarChart data={stats.topStores} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
-                    <YAxis 
-                      dataKey="name" 
-                      type="category" 
+                    <YAxis
+                      dataKey="name"
+                      type="category"
                       width={150}
                       tick={{ fontSize: 12 }}
                     />
@@ -343,12 +375,11 @@ export default function ReportsPage() {
                   {stats.topStores.map((store, index) => (
                     <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white ${
-                          index === 0 ? 'bg-yellow-500' :
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white ${index === 0 ? 'bg-yellow-500' :
                           index === 1 ? 'bg-gray-400' :
-                          index === 2 ? 'bg-orange-600' :
-                          'bg-blue-500'
-                        }`}>
+                            index === 2 ? 'bg-orange-600' :
+                              'bg-blue-500'
+                          }`}>
                           {index + 1}
                         </div>
                         <div>
@@ -383,8 +414,8 @@ export default function ReportsPage() {
                 <ResponsiveContainer width="100%" height={400}>
                   <BarChart data={stats.topProducts}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="name" 
+                    <XAxis
+                      dataKey="name"
                       angle={-45}
                       textAnchor="end"
                       height={100}
@@ -409,9 +440,8 @@ export default function ReportsPage() {
                   {stats.topProducts.map((product, index) => (
                     <div key={index} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-3">
-                        <Package className={`h-5 w-5 ${
-                          index < 3 ? 'text-green-600' : 'text-muted-foreground'
-                        }`} />
+                        <Package className={`h-5 w-5 ${index < 3 ? 'text-green-600' : 'text-muted-foreground'
+                          }`} />
                         <div>
                           <p className="font-medium">{product.name}</p>
                           <p className="text-sm text-muted-foreground">
@@ -445,9 +475,9 @@ export default function ReportsPage() {
                   <BarChart data={stats.topIssues} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
-                    <YAxis 
-                      dataKey="issue" 
-                      type="category" 
+                    <YAxis
+                      dataKey="issue"
+                      type="category"
                       width={180}
                       tick={{ fontSize: 11 }}
                     />
@@ -468,14 +498,13 @@ export default function ReportsPage() {
                 <div className="space-y-3">
                   {stats.topIssues.map((issue, index) => (
                     <div key={index} className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                      <AlertCircle className={`h-5 w-5 mt-1 flex-shrink-0 ${
-                        index < 3 ? 'text-red-600' : 'text-orange-600'
-                      }`} />
+                      <AlertCircle className={`h-5 w-5 mt-1 flex-shrink-0 ${index < 3 ? 'text-red-600' : 'text-orange-600'
+                        }`} />
                       <div className="flex-1 min-w-0">
                         <p className="font-medium capitalize">{issue.issue}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <div className="flex-1 bg-muted rounded-full h-2">
-                            <div 
+                            <div
                               className="bg-orange-500 h-2 rounded-full transition-all"
                               style={{ width: `${(issue.count / stats.topIssues[0].count) * 100}%` }}
                             />
