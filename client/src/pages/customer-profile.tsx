@@ -44,10 +44,13 @@ export default function CustomerProfilePage() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
   const [isEditingCustomer, setIsEditingCustomer] = useState(false);
-  const [editCustomerData, setEditCustomerData] = useState({ name: "", email: "", address: "", phone: "" });
+  const [editCustomerData, setEditCustomerData] = useState({ name: "", email: "", address: "", phone: "", secondPhone: "" });
   const [editPhoneValue, setEditPhoneValue] = useState("");
   const [editPhoneError, setEditPhoneError] = useState<string>("");
   const [isCheckingEditPhone, setIsCheckingEditPhone] = useState(false);
+  const [editSecondPhoneValue, setEditSecondPhoneValue] = useState("");
+  const [editSecondPhoneError, setEditSecondPhoneError] = useState<string>("");
+  const [isCheckingEditSecondPhone, setIsCheckingEditSecondPhone] = useState(false);
   const [activeTab, setActiveTab] = useState("info");
 
   // Email confirmation state
@@ -148,6 +151,50 @@ export default function CustomerProfilePage() {
     const timer = setTimeout(checkPhone, 500);
     return () => clearTimeout(timer);
   }, [editPhoneValue, isEditingCustomer, customer?.phone]);
+
+  // Second phone validation for customer edit
+  useEffect(() => {
+    const checkSecondPhone = async () => {
+      if (!isEditingCustomer || editSecondPhoneValue === (customer?.secondPhone || "")) {
+        setEditSecondPhoneError("");
+        return;
+      }
+
+      if (editSecondPhoneValue.length > 0 && editSecondPhoneValue.length < 10) {
+        setEditSecondPhoneError("");
+        return;
+      }
+
+      // Skip check if field is empty
+      if (!editSecondPhoneValue || editSecondPhoneValue.trim() === "") {
+        setEditSecondPhoneError("");
+        return;
+      }
+
+      setIsCheckingEditSecondPhone(true);
+      try {
+        const response = await fetch(`/api/customers/check-second-phone/${encodeURIComponent(editSecondPhoneValue)}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+        });
+        const data = await response.json();
+
+        if (data.exists) {
+          setEditSecondPhoneError(`Second phone already exists for customer: ${data.customer.name} (${data.customer.customerId})`);
+        } else {
+          setEditSecondPhoneError("");
+        }
+      } catch (error) {
+        console.error('Error checking second phone:', error);
+      } finally {
+        setIsCheckingEditSecondPhone(false);
+      }
+    };
+
+    const timer = setTimeout(checkSecondPhone, 500);
+    return () => clearTimeout(timer);
+  }, [editSecondPhoneValue, isEditingCustomer, customer?.secondPhone]);
 
   // Sync notification preferences with customer data
   useEffect(() => {
@@ -366,6 +413,15 @@ export default function CustomerProfilePage() {
                     });
                     return;
                   }
+                  // Check for second phone error before saving
+                  if (editSecondPhoneError) {
+                    toast({
+                      title: "Error",
+                      description: editSecondPhoneError,
+                      variant: "destructive",
+                    });
+                    return;
+                  }
                   // Save changes
                   updateCustomerMutation.mutate(editCustomerData);
                 } else {
@@ -373,16 +429,19 @@ export default function CustomerProfilePage() {
                   setIsEditingCustomer(true);
                   setEditCustomerData({
                     name: customer.name,
-                    email: customer.email,
+                    email: customer.email || "",
                     address: customer.address,
                     phone: customer.phone,
+                    secondPhone: customer.secondPhone || "",
                   });
                   setEditPhoneValue(customer.phone);
+                  setEditSecondPhoneValue(customer.secondPhone || "");
                   setEditPhoneError("");
+                  setEditSecondPhoneError("");
                 }
               }}
               className="w-full sm:w-auto"
-              disabled={updateCustomerMutation.isPending || !!editPhoneError || isCheckingEditPhone}
+              disabled={updateCustomerMutation.isPending || !!editPhoneError || isCheckingEditPhone || !!editSecondPhoneError || isCheckingEditSecondPhone}
             >
               <Edit2 className="h-4 w-4 mr-2" />
               {isEditingCustomer ? (updateCustomerMutation.isPending ? "Saving..." : "Save Changes") : "Edit Info"}
@@ -721,7 +780,7 @@ export default function CustomerProfilePage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="edit-customer-email">Email Address</Label>
+                      <Label htmlFor="edit-customer-email">Email Address (Optional)</Label>
                       <Input
                         id="edit-customer-email"
                         type="email"
@@ -759,6 +818,32 @@ export default function CustomerProfilePage() {
                     </div>
 
                     <div className="space-y-2">
+                      <Label htmlFor="edit-customer-second-phone">Second Phone (Optional)</Label>
+                      <Input
+                        id="edit-customer-second-phone"
+                        value={editSecondPhoneValue}
+                        onChange={(e) => {
+                          setEditSecondPhoneValue(e.target.value);
+                          setEditCustomerData({ ...editCustomerData, secondPhone: e.target.value });
+                        }}
+                        placeholder="+1 234 567 8901"
+                        className={editSecondPhoneError ? "border-destructive" : ""}
+                      />
+                      {isCheckingEditSecondPhone && (
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3 animate-spin" />
+                          Checking second phone...
+                        </p>
+                      )}
+                      {editSecondPhoneError && (
+                        <p className="text-sm text-destructive flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {editSecondPhoneError}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
                       <Label htmlFor="edit-customer-address">Address</Label>
                       <Textarea
                         id="edit-customer-address"
@@ -775,7 +860,7 @@ export default function CustomerProfilePage() {
                       <Mail className="h-5 w-5 text-muted-foreground" />
                       <div className="flex-1">
                         <p className="text-sm text-muted-foreground">Email</p>
-                        <p className="font-medium">{customer.email}</p>
+                        <p className="font-medium">{customer.email || "Not provided"}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -785,6 +870,15 @@ export default function CustomerProfilePage() {
                         <p className="font-medium">{customer.phone}</p>
                       </div>
                     </div>
+                    {customer.secondPhone && (
+                      <div className="flex items-center gap-3">
+                        <Phone className="h-5 w-5 text-muted-foreground" />
+                        <div className="flex-1">
+                          <p className="text-sm text-muted-foreground">Second Phone</p>
+                          <p className="font-medium">{customer.secondPhone}</p>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex items-start gap-3">
                       <MapPin className="h-5 w-5 text-muted-foreground mt-1" />
                       <div className="flex-1">

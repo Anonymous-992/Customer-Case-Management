@@ -24,6 +24,9 @@ export default function CustomersPage() {
   const [phoneValue, setPhoneValue] = useState("");
   const [phoneError, setPhoneError] = useState<string>("");
   const [isCheckingPhone, setIsCheckingPhone] = useState(false);
+  const [secondPhoneValue, setSecondPhoneValue] = useState("");
+  const [secondPhoneError, setSecondPhoneError] = useState<string>("");
+  const [isCheckingSecondPhone, setIsCheckingSecondPhone] = useState(false);
   const { toast } = useToast();
   const { settings, formatDate, t } = useSettings();
 
@@ -74,11 +77,46 @@ export default function CustomersPage() {
     return () => clearTimeout(timer);
   }, [phoneValue]);
 
+  // Debounced second phone number check
+  useEffect(() => {
+    const checkSecondPhone = async () => {
+      if (secondPhoneValue.length < 10) {
+        setSecondPhoneError("");
+        return;
+      }
+
+      setIsCheckingSecondPhone(true);
+      try {
+        const response = await fetch(`/api/customers/check-second-phone/${encodeURIComponent(secondPhoneValue)}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+        });
+        const data = await response.json();
+
+        if (data.exists) {
+          setSecondPhoneError(`Second phone already exists for ${data.customer.name} (${data.customer.customerId})`);
+        } else {
+          setSecondPhoneError("");
+        }
+      } catch (error) {
+        console.error('Error checking second phone:', error);
+      } finally {
+        setIsCheckingSecondPhone(false);
+      }
+    };
+
+    const timer = setTimeout(checkSecondPhone, 500); // Debounce 500ms
+    return () => clearTimeout(timer);
+  }, [secondPhoneValue]);
+
   // Reset phone validation when dialog closes
   useEffect(() => {
     if (!isDialogOpen) {
       setPhoneValue("");
       setPhoneError("");
+      setSecondPhoneValue("");
+      setSecondPhoneError("");
       reset();
     }
   }, [isDialogOpen, reset]);
@@ -111,6 +149,15 @@ export default function CustomersPage() {
       toast({
         title: "Error",
         description: phoneError,
+        variant: "destructive",
+      });
+      return;
+    }
+    // Prevent submission if second phone number is duplicate
+    if (secondPhoneError) {
+      toast({
+        title: "Error",
+        description: secondPhoneError,
         variant: "destructive",
       });
       return;
@@ -160,7 +207,7 @@ export default function CustomersPage() {
     const search = searchTerm.toLowerCase();
     return (
       customer.name.toLowerCase().includes(search) ||
-      customer.email.toLowerCase().includes(search) ||
+      customer.email?.toLowerCase().includes(search) ||
       customer.phone.includes(search) ||
       customer.customerId.toLowerCase().includes(search)
     );
@@ -229,7 +276,33 @@ export default function CustomersPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">{t("email_address")}</Label>
+                <Label htmlFor="secondPhone">Second Phone (Optional)</Label>
+                <Input
+                  id="secondPhone"
+                  data-testid="input-customer-second-phone"
+                  placeholder="+1 234 567 8901"
+                  value={secondPhoneValue}
+                  onChange={(e) => {
+                    setSecondPhoneValue(e.target.value);
+                    setValue("secondPhone", e.target.value);
+                  }}
+                  className={secondPhoneError ? "border-destructive" : ""}
+                />
+                {isCheckingSecondPhone && (
+                  <p className="text-sm text-muted-foreground flex items-center gap-1">
+                    <span className="animate-spin">⏳</span> Checking second phone...
+                  </p>
+                )}
+                {secondPhoneError && (
+                  <p className="text-sm text-destructive flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {secondPhoneError}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address (Optional)</Label>
                 <Input
                   id="email"
                   type="email"
@@ -270,7 +343,7 @@ export default function CustomersPage() {
                 <Button
                   type="submit"
                   className="flex-1"
-                  disabled={createCustomerMutation.isPending || !!phoneError || isCheckingPhone}
+                  disabled={createCustomerMutation.isPending || !!phoneError || isCheckingPhone || !!secondPhoneError || isCheckingSecondPhone}
                   data-testid="button-submit-customer"
                 >
                   {createCustomerMutation.isPending ? t("creating") : t("create_customer")}

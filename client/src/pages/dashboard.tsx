@@ -1010,7 +1010,7 @@ export default function DashboardPage() {
   const filteredCustomers = customers?.filter(c =>
     c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.phone.includes(customerSearch) ||
-    c.email.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.email?.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.customerId.toLowerCase().includes(customerSearch.toLowerCase())
   ) || [];
 

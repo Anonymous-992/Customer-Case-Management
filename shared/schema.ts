@@ -54,8 +54,9 @@ export const customerSchema = z.object({
   customerId: z.string(), // CUST-1001 format
   name: z.string(),
   phone: z.string(),
+  secondPhone: z.string().optional(),
   address: z.string(),
-  email: z.string().email(),
+  email: z.string().email().optional(),
   notificationPreferences: z.object({
     email: z.boolean(),
     sms: z.boolean(),
@@ -68,8 +69,9 @@ export const customerSchema = z.object({
 export const insertCustomerSchema = z.object({
   name: z.string().optional(),
   phone: z.string().optional(),
+  secondPhone: z.string().optional(),
   address: z.string().optional(),
-  email: z.string().email("Invalid email address"),
+  email: z.string().email("Invalid email address").optional().or(z.literal("")),
 });
 
 export type Customer = z.infer<typeof customerSchema>;

@@ -292,6 +292,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Check if second phone number exists
+  app.get("/api/customers/check-second-phone/:phone", authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const phone = decodeURIComponent(req.params.phone);
+      const existingCustomer = isMongoDBAvailable
+        ? await Customer.findOne({ secondPhone: phone })
+        : await memoryStorage.findCustomerBySecondPhone(phone);
+
+      res.json({
+        exists: !!existingCustomer,
+        customer: existingCustomer ? {
+          name: existingCustomer.name,
+          customerId: existingCustomer.customerId
+        } : null
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/customers", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { q } = req.query;
@@ -349,7 +369,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/customers", authenticateToken, async (req: AuthRequest, res) => {
     try {
-      const { name, phone, address, email } = req.body;
+      const { name, phone, secondPhone, address, email } = req.body;
 
       // Check for duplicate phone number
       const existingCustomer = isMongoDBAvailable
@@ -362,6 +382,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Check for duplicate second phone number if provided
+      if (secondPhone && secondPhone.trim()) {
+        const existingSecondPhone = isMongoDBAvailable
+          ? await Customer.findOne({ secondPhone })
+          : await memoryStorage.findCustomerBySecondPhone(secondPhone);
+
+        if (existingSecondPhone) {
+          return res.status(400).json({
+            message: `Second phone number already exists for customer: ${existingSecondPhone.name} (${existingSecondPhone.customerId})`
+          });
+        }
+      }
+
       let customer;
       const customerId = await generateUniqueCustomerId();
 
@@ -371,8 +404,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           customerId,
           name,
           phone,
+          secondPhone: secondPhone || undefined,
           address,
-          email,
+          email: email || undefined,
           createdBy: req.admin!._id,
         });
 
@@ -392,8 +426,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           customerId,
           name,
           phone,
+          secondPhone: secondPhone || undefined,
           address,
-          email,
+          email: email || undefined,
           createdBy: req.admin!._id,
         });
 
@@ -417,7 +452,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/customers/:id", authenticateToken, async (req: AuthRequest, res) => {
     try {
-      const { name, email, address, phone } = req.body;
+      const { name, email, address, phone, secondPhone } = req.body;
 
       // If phone is being updated, check for duplicates
       if (phone) {
@@ -432,11 +467,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // If secondPhone is being updated, check for duplicates
+      if (secondPhone && secondPhone.trim()) {
+        const existingSecondPhone = isMongoDBAvailable
+          ? await Customer.findOne({ secondPhone, _id: { $ne: req.params.id } })
+          : await memoryStorage.findCustomerBySecondPhoneExcluding(secondPhone, req.params.id);
+
+        if (existingSecondPhone) {
+          return res.status(400).json({
+            message: `Second phone number already exists for customer: ${existingSecondPhone.name} (${existingSecondPhone.customerId})`
+          });
+        }
+      }
+
       const updates: any = {};
       if (name !== undefined) updates.name = name;
       if (email !== undefined) updates.email = email;
       if (address !== undefined) updates.address = address;
       if (phone !== undefined) updates.phone = phone;
+      if (secondPhone !== undefined) updates.secondPhone = secondPhone || undefined;
 
       const customer = isMongoDBAvailable
         ? await Customer.findByIdAndUpdate(req.params.id, updates, { new: true })

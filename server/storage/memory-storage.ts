@@ -147,6 +147,14 @@ class MemoryStorage {
     return Array.from(this.customers.values()).find(c => c.phone === phone && c._id !== excludeId);
   }
 
+  async findCustomerBySecondPhone(phone: string) {
+    return Array.from(this.customers.values()).find(c => c.secondPhone === phone);
+  }
+
+  async findCustomerBySecondPhoneExcluding(phone: string, excludeId: string) {
+    return Array.from(this.customers.values()).find(c => c.secondPhone === phone && c._id !== excludeId);
+  }
+
   // Product Case methods
   async findAllCases() {
     return Array.from(this.cases.values()).sort((a, b) =>

@@ -4,8 +4,9 @@ export interface ICustomer extends Document {
   customerId: string;
   name: string;
   phone: string;
+  secondPhone?: string;
   address: string;
-  email: string;
+  email?: string;
   notificationPreferences?: {
     email: boolean;
     sms: boolean;
@@ -31,13 +32,18 @@ const CustomerSchema = new Schema<ICustomer>({
     required: true,
     trim: true,
   },
+  secondPhone: {
+    type: String,
+    required: false,
+    trim: true,
+  },
   address: {
     type: String,
     required: true,
   },
   email: {
     type: String,
-    required: true,
+    required: false,
     trim: true,
     lowercase: true,
   },
