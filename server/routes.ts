@@ -272,13 +272,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== CUSTOMER ROUTES =====
-  // Check if phone number exists
+  // Check if phone number exists (checks both primary and secondary phone)
   app.get("/api/customers/check-phone/:phone", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const phone = decodeURIComponent(req.params.phone);
-      const existingCustomer = isMongoDBAvailable
-        ? await Customer.findOne({ phone })
-        : await memoryStorage.findCustomerByPhone(phone);
+
+      let existingCustomer;
+      if (isMongoDBAvailable) {
+        existingCustomer = await Customer.findOne({
+          $or: [{ phone }, { secondPhone: phone }]
+        });
+      } else {
+        const primary = await memoryStorage.findCustomerByPhone(phone);
+        const secondary = await memoryStorage.findCustomerBySecondPhone(phone);
+        existingCustomer = primary || secondary;
+      }
 
       res.json({
         exists: !!existingCustomer,
@@ -292,13 +300,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Check if second phone number exists
+  // Check if second phone number exists (checks both primary and secondary phone)
   app.get("/api/customers/check-second-phone/:phone", authenticateToken, async (req: AuthRequest, res) => {
     try {
       const phone = decodeURIComponent(req.params.phone);
-      const existingCustomer = isMongoDBAvailable
-        ? await Customer.findOne({ secondPhone: phone })
-        : await memoryStorage.findCustomerBySecondPhone(phone);
+
+      let existingCustomer;
+      if (isMongoDBAvailable) {
+        existingCustomer = await Customer.findOne({
+          $or: [{ phone }, { secondPhone: phone }]
+        });
+      } else {
+        const primary = await memoryStorage.findCustomerByPhone(phone);
+        const secondary = await memoryStorage.findCustomerBySecondPhone(phone);
+        existingCustomer = primary || secondary;
+      }
 
       res.json({
         exists: !!existingCustomer,
@@ -371,27 +387,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { name, phone, secondPhone, address, email } = req.body;
 
-      // Check for duplicate phone number
-      const existingCustomer = isMongoDBAvailable
-        ? await Customer.findOne({ phone })
-        : await memoryStorage.findCustomerByPhone(phone);
-
-      if (existingCustomer) {
-        return res.status(400).json({
-          message: `Phone number already exists for customer: ${existingCustomer.name} (${existingCustomer.customerId})`
+      // Check if primary phone already exists as primary OR secondary phone in any customer
+      if (isMongoDBAvailable) {
+        const existingWithPhone = await Customer.findOne({
+          $or: [{ phone }, { secondPhone: phone }]
         });
+        if (existingWithPhone) {
+          return res.status(400).json({
+            message: `Phone number already exists for customer: ${existingWithPhone.name} (${existingWithPhone.customerId})`
+          });
+        }
+      } else {
+        const existingPrimary = await memoryStorage.findCustomerByPhone(phone);
+        const existingSecondary = await memoryStorage.findCustomerBySecondPhone(phone);
+        if (existingPrimary || existingSecondary) {
+          const existing = existingPrimary || existingSecondary;
+          return res.status(400).json({
+            message: `Phone number already exists for customer: ${existing!.name} (${existing!.customerId})`
+          });
+        }
       }
 
-      // Check for duplicate second phone number if provided
+      // Check if second phone already exists as primary OR secondary phone in any customer
       if (secondPhone && secondPhone.trim()) {
-        const existingSecondPhone = isMongoDBAvailable
-          ? await Customer.findOne({ secondPhone })
-          : await memoryStorage.findCustomerBySecondPhone(secondPhone);
-
-        if (existingSecondPhone) {
-          return res.status(400).json({
-            message: `Second phone number already exists for customer: ${existingSecondPhone.name} (${existingSecondPhone.customerId})`
+        if (isMongoDBAvailable) {
+          const existingWithSecondPhone = await Customer.findOne({
+            $or: [{ phone: secondPhone }, { secondPhone }]
           });
+          if (existingWithSecondPhone) {
+            return res.status(400).json({
+              message: `Second phone number already exists for customer: ${existingWithSecondPhone.name} (${existingWithSecondPhone.customerId})`
+            });
+          }
+        } else {
+          const existingPrimary = await memoryStorage.findCustomerByPhone(secondPhone);
+          const existingSecondary = await memoryStorage.findCustomerBySecondPhone(secondPhone);
+          if (existingPrimary || existingSecondary) {
+            const existing = existingPrimary || existingSecondary;
+            return res.status(400).json({
+              message: `Second phone number already exists for customer: ${existing!.name} (${existing!.customerId})`
+            });
+          }
         }
       }
 
@@ -454,29 +490,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { name, email, address, phone, secondPhone } = req.body;
 
-      // If phone is being updated, check for duplicates
+      // If phone is being updated, check if it exists as primary OR secondary in OTHER customers
       if (phone) {
-        const existingCustomer = isMongoDBAvailable
-          ? await Customer.findOne({ phone, _id: { $ne: req.params.id } })
-          : await memoryStorage.findCustomerByPhoneExcluding(phone, req.params.id);
-
-        if (existingCustomer) {
-          return res.status(400).json({
-            message: `Phone number already exists for customer: ${existingCustomer.name} (${existingCustomer.customerId})`
+        if (isMongoDBAvailable) {
+          const existingCustomer = await Customer.findOne({
+            $or: [{ phone }, { secondPhone: phone }],
+            _id: { $ne: req.params.id }
           });
+          if (existingCustomer) {
+            return res.status(400).json({
+              message: `Phone number already exists for customer: ${existingCustomer.name} (${existingCustomer.customerId})`
+            });
+          }
+        } else {
+          const existingPrimary = await memoryStorage.findCustomerByPhoneExcluding(phone, req.params.id);
+          const existingSecondary = await memoryStorage.findCustomerBySecondPhoneExcluding(phone, req.params.id);
+          if (existingPrimary || existingSecondary) {
+            const existing = existingPrimary || existingSecondary;
+            return res.status(400).json({
+              message: `Phone number already exists for customer: ${existing!.name} (${existing!.customerId})`
+            });
+          }
         }
       }
 
-      // If secondPhone is being updated, check for duplicates
+      // If secondPhone is being updated, check if it exists as primary OR secondary in OTHER customers
       if (secondPhone && secondPhone.trim()) {
-        const existingSecondPhone = isMongoDBAvailable
-          ? await Customer.findOne({ secondPhone, _id: { $ne: req.params.id } })
-          : await memoryStorage.findCustomerBySecondPhoneExcluding(secondPhone, req.params.id);
-
-        if (existingSecondPhone) {
-          return res.status(400).json({
-            message: `Second phone number already exists for customer: ${existingSecondPhone.name} (${existingSecondPhone.customerId})`
+        if (isMongoDBAvailable) {
+          const existingSecondPhone = await Customer.findOne({
+            $or: [{ phone: secondPhone }, { secondPhone }],
+            _id: { $ne: req.params.id }
           });
+          if (existingSecondPhone) {
+            return res.status(400).json({
+              message: `Second phone number already exists for customer: ${existingSecondPhone.name} (${existingSecondPhone.customerId})`
+            });
+          }
+        } else {
+          const existingPrimary = await memoryStorage.findCustomerByPhoneExcluding(secondPhone, req.params.id);
+          const existingSecondary = await memoryStorage.findCustomerBySecondPhoneExcluding(secondPhone, req.params.id);
+          if (existingPrimary || existingSecondary) {
+            const existing = existingPrimary || existingSecondary;
+            return res.status(400).json({
+              message: `Second phone number already exists for customer: ${existing!.name} (${existing!.customerId})`
+            });
+          }
         }
       }
 

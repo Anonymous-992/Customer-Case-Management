@@ -102,6 +102,9 @@ export default function DashboardPage() {
   const [customerPhoneValue, setCustomerPhoneValue] = useState("");
   const [customerPhoneError, setCustomerPhoneError] = useState<string>("");
   const [isCheckingCustomerPhone, setIsCheckingCustomerPhone] = useState(false);
+  const [customerSecondPhoneValue, setCustomerSecondPhoneValue] = useState("");
+  const [customerSecondPhoneError, setCustomerSecondPhoneError] = useState<string>("");
+  const [isCheckingCustomerSecondPhone, setIsCheckingCustomerSecondPhone] = useState(false);
   const [showStatusUpdateDialog, setShowStatusUpdateDialog] = useState(false);
   const [statusUpdateData, setStatusUpdateData] = useState<any>(null);
 
@@ -265,11 +268,39 @@ export default function DashboardPage() {
     return () => clearTimeout(timer);
   }, [customerPhoneValue]);
 
+  // Customer second phone validation for Create Customer modal
+  useEffect(() => {
+    const checkSecondPhone = async () => {
+      if (customerSecondPhoneValue.length >= 10) {
+        setIsCheckingCustomerSecondPhone(true);
+        try {
+          const response = await apiRequest("GET", `/api/customers/check-second-phone/${customerSecondPhoneValue}`);
+          if (response.exists) {
+            setCustomerSecondPhoneError(`Second phone already exists for customer: ${response.customer.name} (${response.customer.customerId})`);
+          } else {
+            setCustomerSecondPhoneError("");
+          }
+        } catch (error) {
+          console.error("Error checking second phone:", error);
+        } finally {
+          setIsCheckingCustomerSecondPhone(false);
+        }
+      } else {
+        setCustomerSecondPhoneError("");
+      }
+    };
+
+    const timer = setTimeout(checkSecondPhone, 500);
+    return () => clearTimeout(timer);
+  }, [customerSecondPhoneValue]);
+
   // Reset customer form when dialog closes
   useEffect(() => {
     if (!isCreateCustomerOpen) {
       setCustomerPhoneValue("");
       setCustomerPhoneError("");
+      setCustomerSecondPhoneValue("");
+      setCustomerSecondPhoneError("");
       resetCustomer();
     }
   }, [isCreateCustomerOpen, resetCustomer]);
@@ -999,6 +1030,15 @@ export default function DashboardPage() {
       toast({
         title: "Error",
         description: customerPhoneError,
+        variant: "destructive",
+      });
+      return;
+    }
+    // Prevent submission if second phone number is duplicate
+    if (customerSecondPhoneError) {
+      toast({
+        title: "Error",
+        description: customerSecondPhoneError,
         variant: "destructive",
       });
       return;
@@ -2979,7 +3019,33 @@ export default function DashboardPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="customer-email">Email Address *</Label>
+              <Label htmlFor="customer-second-phone">Second Phone (Optional)</Label>
+              <Input
+                id="customer-second-phone"
+                placeholder="+1 234 567 8901"
+                value={customerSecondPhoneValue}
+                onChange={(e) => {
+                  setCustomerSecondPhoneValue(e.target.value);
+                  setCustomerValue("secondPhone", e.target.value);
+                }}
+                className={customerSecondPhoneError ? "border-destructive" : ""}
+              />
+              {isCheckingCustomerSecondPhone && (
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <Clock className="h-3 w-3 animate-spin" />
+                  Checking second phone...
+                </p>
+              )}
+              {customerSecondPhoneError && (
+                <p className="text-sm text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {customerSecondPhoneError}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="customer-email">Email Address (Optional)</Label>
               <Input
                 id="customer-email"
                 type="email"
@@ -3018,7 +3084,7 @@ export default function DashboardPage() {
               <Button
                 type="submit"
                 className="flex-1"
-                disabled={createCustomerMutation.isPending || !!customerPhoneError || isCheckingCustomerPhone}
+                disabled={createCustomerMutation.isPending || !!customerPhoneError || isCheckingCustomerPhone || !!customerSecondPhoneError || isCheckingCustomerSecondPhone}
               >
                 {createCustomerMutation.isPending ? "Creating..." : "Create Customer"}
               </Button>
